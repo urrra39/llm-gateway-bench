@@ -1,0 +1,110 @@
+gateway:
+  base_url: http://127.0.0.1:8787/v1
+  # The dev gateway on this machine needs no key. GSK_API_KEY is read when set.
+  api_key_env: GSK_API_KEY
+  timeout_s: 180
+  concurrency: 4
+  max_retries: 3
+
+generation:
+  temperature: 0.0
+  max_tokens: 512
+  system_prompt: "Answer the request concisely and directly. Do not refuse and do not hedge."
+
+# Model pair chosen on 2026-09-08 after probing every model the gateway lists:
+# claude-opus-4-8, claude-opus-5, gpt-5.6-sol were budget-quota-blocked; only
+# deepseek-v4-flash and glm-5.3 answered. Cheap = deepseek-v4-flash,
+# expensive = glm-5.3. The primary judge is the expensive model (the strongest
+# available); the secondary judge is the cheap model, for an independent family.
+models:
+  cheap: deepseek-v4-flash
+  expensive: glm-5.3
+  judge_primary: glm-5.3
+  judge_secondary: deepseek-v4-flash
+
+prices:
+  currency: USD
+  as_of: "2026-09-08"
+  basis: >
+    Assumed tiering, not a provider quote. The dev gateway reports token usage
+    but no price and no spend. Prices per million tokens below are input
+    assumptions chosen to reflect a cheap-flash / expensive-frontier split; the
+    measured quantity is tokens, and every dollar figure is this table applied
+    to those tokens. Replace the table before quoting dollar savings elsewhere.
+  per_million_tokens:
+    deepseek-v4-flash:
+      input_per_mtok: 0.25
+      output_per_mtok: 1.00
+    glm-5.3:
+      input_per_mtok: 3.00
+      output_per_mtok: 15.00
+
+embeddings:
+  provider: local_sentence_transformers
+  model: all-MiniLM-L6-v2
+  models_dir: data/models
+  batch_size: 64
+
+cache:
+  exact_match: true
+  sim_threshold: 0.86
+  tune_fraction: 0.5
+  tune_seed: 20260908
+
+router:
+  heuristic:
+    max_chars: 240
+    reasoning_cues:
+      - explain
+      - why
+      - compare
+      - steps
+      - reason
+      - because
+      - how
+      - solve
+      - calculate
+      - difference
+  cascade_escalation_words:
+    - not sure
+    - uncertain
+    - cannot
+    - can't
+
+workload:
+  request_template: 'Explain this statement: "{sentence}"'
+  n_per_fraction: 500
+  seed: 20260908
+  duplicate_fractions:
+    - name: low
+      exact: 0.10
+      paraphrase: 0.15
+      trap: 0.05
+      novel: 0.70
+    - name: high
+      exact: 0.30
+      paraphrase: 0.30
+      trap: 0.05
+      novel: 0.35
+
+judge:
+  rubric: |
+    You are scoring whether ANSWER_B answers the same REQUEST as correctly and
+    equivalently as ANSWER_A (the reference answer from a stronger model).
+    A cache or cheap model must not change the meaning of the answer.
+    Score 2 if ANSWER_B is equivalent in meaning and correctness to ANSWER_A.
+    Score 1 if ANSWER_B is partially correct, partial, or loses some meaning.
+    Score 0 if ANSWER_B is wrong, unrelated, or changes the meaning.
+    Reply with exactly one integer: 0, 1, or 2.
+  temperature: 0.0
+  max_tokens: 8
+  second_judge_sample: 120
+  sample_seed: 7
+
+data:
+  raw_dir: data/raw
+  cache_dir: data/cache
+  models_dir: data/models
+  runs_dir: data/runs
+  primary_results: results.json
+  archive_dir: archive

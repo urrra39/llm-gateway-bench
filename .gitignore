@@ -1,0 +1,24 @@
+# model weights, caches and scratch
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+dist/
+htmlcov/
+.coverage
+*.tmp
+*.log
+.DS_Store
+
+# downloaded corpora and model files are regenerable and large
+data/raw/
+data/models/
+data/cache/
+
+# human scratch under the repo root is never a result
+results_pilot.json
+scratch/
