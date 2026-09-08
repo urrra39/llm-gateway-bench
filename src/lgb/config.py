@@ -127,8 +127,8 @@ class WorkloadSpec(Frozen):
 class JudgeSpec(Frozen):
     rubric: str = ""
     temperature: float = 0.0
-    max_tokens: int = 64
-    second_judge_sample: int = 120
+    max_tokens: int = 1200
+    second_judge_sample: int = 60
     sample_seed: int = 7
 
 

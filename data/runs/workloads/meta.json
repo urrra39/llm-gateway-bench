@@ -1,0 +1,23 @@
+{
+  "fractions": [
+    {
+      "exact": 0.1,
+      "name": "low",
+      "novel": 0.7,
+      "paraphrase": 0.15,
+      "trap": 0.05
+    },
+    {
+      "exact": 0.3,
+      "name": "high",
+      "novel": 0.35,
+      "paraphrase": 0.3,
+      "trap": 0.05
+    }
+  ],
+  "n_per_fraction": 500,
+  "request_template": "Explain this statement: \"{sentence}\"",
+  "sample_rows": 3000,
+  "seed": 20260908,
+  "source": "PAWS (google-research-datasets/paws), labeled_final/train"
+}
