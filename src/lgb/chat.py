@@ -81,6 +81,8 @@ class Gateway:
             "temperature": temperature,
             "max_tokens": max_tokens or self.cfg.generation.max_tokens,
         }
+        if self.cfg.generation.reasoning_effort:
+            payload["reasoning_effort"] = self.cfg.generation.reasoning_effort
         last_error: str | None = None
         started = time.perf_counter()
         for attempt in range(self.cfg.gateway.max_retries):

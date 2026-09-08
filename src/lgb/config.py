@@ -23,10 +23,14 @@ class GatewaySpec(Frozen):
 
 class GenerationSpec(Frozen):
     temperature: float = 0.0
-    max_tokens: int = 512
-    system_prompt: str = (
-        "Answer the request concisely and directly. Do not refuse and do not hedge."
-    )
+    max_tokens: int = 4096
+    #: Both gateway models are reasoning models on the dev gateway: they emit a
+    #: chain of thought into `reasoning_content` before the answer, and a small
+    #: max_tokens can be consumed entirely by reasoning, leaving `content`
+    #: empty. A low reasoning effort keeps answers fast and non-empty while
+    #: still letting the model think briefly. Measured 2026-09-08.
+    reasoning_effort: str | None = "low"
+    system_prompt: str = "Answer the request concisely, in at most three sentences. Do not refuse."
 
 
 class ModelSpec(Frozen):
@@ -70,8 +74,8 @@ class CacheSpec(Frozen):
 
 class HeuristicSpec(Frozen):
     max_chars: int = 240
+    #: "explain" is intentionally absent: the workload wrapper makes it constant.
     reasoning_cues: tuple[str, ...] = (
-        "explain",
         "why",
         "compare",
         "steps",
@@ -81,6 +85,8 @@ class HeuristicSpec(Frozen):
         "solve",
         "calculate",
         "difference",
+        "prove",
+        "justify",
     )
 
 

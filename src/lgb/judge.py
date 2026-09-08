@@ -11,6 +11,7 @@ denominator). Verdicts persist per row. Human labels are never filled by code.
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -70,10 +71,15 @@ def judge_run(
         )
 
     def parse(text: str) -> int | None:
-        for tok in text.strip().split():
-            if tok in ("0", "1", "2"):
-                return int(tok)
-        return None
+        if not text:
+            return None
+        for tok in text.split():
+            stripped = tok.strip(".,:;!?()[]{}\"'`")
+            if stripped in ("0", "1", "2"):
+                return int(stripped)
+        # fall back to the first standalone 0/1/2 (never inside a larger number)
+        m = re.search(r"(?<!\d)[012](?!\d)", text)
+        return int(m.group(0)) if m else None
 
     pending: list[dict[str, Any]] = []
     for r in outcomes.itertuples(index=False):

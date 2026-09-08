@@ -8,18 +8,24 @@ gateway:
 
 generation:
   temperature: 0.0
-  max_tokens: 320
+  # Large enough that reasoning + final content both fit: both models emit a
+  # chain of thought first, and a small budget is consumed entirely by
+  # reasoning, leaving content empty.
+  max_tokens: 4096
+  reasoning_effort: low
   system_prompt: "Answer the request concisely, in at most three sentences. Do not refuse."
 
 # Model pair chosen on 2026-09-08 after probing every model the gateway lists:
 # claude-opus-4-8, claude-opus-5, gpt-5.6-sol were budget-quota-blocked; only
-# deepseek-v4-flash and glm-5.3 answered.
-# deepseek-v4-flash is the expensive tier AND the reference: its content is
-# reliable (0/7 empty in the probe) and fast. glm-5.3 is the cheap tier; it
-# produced empty content on ~15-30% of requests in the probe at any token
-# budget, which the cascade must escalate on - a measured property of the
-# cheap model, not a hidden assumption. The primary judge is the reliable
-# model; the secondary judge is the cheap model, for an independent family.
+# deepseek-v4-flash and glm-5.3 answered. Both are reasoning models on this
+# gateway (chain of thought in `reasoning_content`); probing showed that with a
+# small max_tokens the reasoning can consume the whole budget and `content`
+# comes back empty, which read as model unreliability until the raw body was
+# inspected. With reasoning_effort=low and a 2048-token budget both answer
+# reliably; glm-5.3 then uses far fewer output tokens than deepseek-v4-flash.
+# deepseek-v4-flash is the expensive tier AND the reference; glm-5.3 is the
+# cheap tier. The primary judge is the reference model; the secondary judge is
+# the cheap model, for an independent family.
 models:
   cheap: glm-5.3
   expensive: deepseek-v4-flash
@@ -57,9 +63,13 @@ cache:
 
 router:
   heuristic:
+    # Cue words that signal the request content needs reasoning. "explain" is
+    # deliberately absent: every workload request begins with the fixed wrapper
+    # "Explain this statement: ...", so the word carries no information here and
+    # including it would send every request to the expensive model. Features are
+    # chosen from content cues, not the wrapper.
     max_chars: 240
     reasoning_cues:
-      - explain
       - why
       - compare
       - steps
@@ -69,6 +79,8 @@ router:
       - solve
       - calculate
       - difference
+      - prove
+      - justify
   cascade_escalation_words:
     - not sure
     - uncertain
@@ -101,8 +113,8 @@ judge:
     Score 0 if ANSWER_B is wrong, unrelated, or changes the meaning.
     Reply with exactly one integer: 0, 1, or 2.
   temperature: 0.0
-  max_tokens: 8
-  second_judge_sample: 120
+  max_tokens: 1200
+  second_judge_sample: 60
   sample_seed: 7
 
 data:
