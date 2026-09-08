@@ -174,14 +174,15 @@ def choose_threshold(
     if candidates is None:
         all_sims = np.concatenate([positives, negatives])
         candidates = np.unique(np.round(all_sims, 4)) if len(all_sims) else np.array([0.5])
-    best: tuple[float, float, float] | None = None  # (f1, threshold, stats_index)
+    best_f1 = -1.0
+    best_thr = float(np.max(candidates))
     best_stats: dict[str, float] = {}
-    for thr in np.sort(candidates):
+    for thr in np.sort(candidates)[::-1]:
         stats = evaluate_threshold(positives, negatives, float(thr))
         denom = stats["precision"] + stats["recall"]
         f1 = 2 * stats["precision"] * stats["recall"] / denom if denom else 0.0
-        if best is None or f1 > best[0]:
-            best = (f1, float(thr), 0.0)
+        if f1 > best_f1:  # ties keep the higher threshold (fewer false hits)
+            best_f1 = f1
+            best_thr = float(thr)
             best_stats = stats
-    assert best is not None
-    return best[1], best_stats
+    return best_thr, best_stats

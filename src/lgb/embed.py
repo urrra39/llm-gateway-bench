@@ -7,6 +7,7 @@ an embedding API, because the environment has no GPU and no embedding API key.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -15,13 +16,13 @@ class Embedder:
     def __init__(self, model_name: str, models_dir: Path) -> None:
         self.model_name = model_name
         self.models_dir = models_dir
-        self._model = None  # type: ignore[assignment]
+        self._model: Any = None
         self._loaded = False
 
     def _load(self) -> None:
         if self._loaded:
             return
-        from sentence_transformers import SentenceTransformer  # type: ignore
+        from sentence_transformers import SentenceTransformer
 
         self._model = SentenceTransformer(self.model_name, cache_folder=str(self.models_dir))
         self._loaded = True
@@ -29,13 +30,14 @@ class Embedder:
     def encode(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
         self._load()
         assert self._model is not None
-        vecs = self._model.encode(  # type: ignore[union-attr]
+        vecs = self._model.encode(
             texts,
             batch_size=batch_size,
             convert_to_numpy=True,
             normalize_embeddings=True,
         )
-        return np.asarray(vecs, dtype=np.float32)
+        arr = np.asarray(vecs, dtype=np.float32)
+        return arr
 
     def close(self) -> None:  # pragma: no cover - lifecycle helper
         self._model = None
@@ -44,4 +46,5 @@ class Embedder:
 
 def cosine_sim_matrix(query: np.ndarray, stored: np.ndarray) -> np.ndarray:
     """query (m, d) x stored (n, d) normalized cosine similarity."""
-    return query @ stored.T
+    result: np.ndarray = query @ stored.T
+    return result

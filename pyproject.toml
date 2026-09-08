@@ -60,10 +60,14 @@ no_implicit_reexport = true
 [[tool.mypy.overrides]]
 module = [
     "matplotlib.*",
+    "pandas.*",
     "torch.*",
     "transformers.*",
     "sentence_transformers.*",
     "pyarrow.*",
+    "fastapi.*",
+    "uvicorn.*",
+    "yaml.*",
 ]
 ignore_missing_imports = true
 

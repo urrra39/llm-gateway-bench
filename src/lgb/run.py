@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,8 +24,8 @@ from lgb.cache import (
 from lgb.chat import Gateway, price_for
 from lgb.config import Config
 from lgb.embed import Embedder
-from lgb.router import CascadeRouter, HeuristicRouter, route_for
-from lgb.store import append_rows, read_json, read_parquet, write_json, write_parquet
+from lgb.router import CascadeRouter, HeuristicRouter
+from lgb.store import append_rows, read_parquet, write_json, write_parquet
 from lgb.workload import build_workload, load_pairs, split_tune_report
 
 REPO = Path(__file__).resolve().parents[2]
@@ -40,7 +41,7 @@ def _workload_dir(cfg: Config) -> Path:
     return cfg.data.runs_dir / "workloads"
 
 
-def build_all_workloads(cfg: Config) -> dict:
+def build_all_workloads(cfg: Config) -> dict[str, Any]:
     pairs = load_pairs(SAMPLE_PATH)
     out = _workload_dir(cfg)
     out.mkdir(parents=True, exist_ok=True)
@@ -108,7 +109,7 @@ def _f1(stats: dict[str, float]) -> float:
     return 2 * stats["precision"] * stats["recall"] / denom if denom else 0.0
 
 
-def tune_threshold(cfg: Config, embedder: Embedder) -> dict:
+def tune_threshold(cfg: Config, embedder: Embedder) -> dict[str, Any]:
     """Choose the cache threshold on the tuning half of the workloads' labelled
     paraphrase/trap pairs and assert it beats a random 0.5 threshold."""
     positives: list[float] = []
@@ -123,7 +124,7 @@ def tune_threshold(cfg: Config, embedder: Embedder) -> dict:
     neg_arr = np.asarray(negatives, dtype=float)
     threshold, stats = choose_threshold(pos_arr, neg_arr)
     control = evaluate_threshold(pos_arr, neg_arr, 0.5)
-    record = {
+    record: dict[str, Any] = {
         "threshold": threshold,
         "tune_stats": stats,
         "control_stats": control,
@@ -140,13 +141,13 @@ def tune_threshold(cfg: Config, embedder: Embedder) -> dict:
 def _labelled_similarities(
     embedder: Embedder, rows: list[records.WorkloadRow]
 ) -> tuple[list[float], list[float]]:
-    groups: dict[str, dict] = {}
+    anchors_by_group: dict[str, str] = {}
+    follows_by_group: dict[str, list[records.WorkloadRow]] = {}
     for r in rows:
-        g = groups.setdefault(r.group_id, {"anchor": None, "follows": []})
         if r.dup_type == "novel":
-            g["anchor"] = r.request
+            anchors_by_group[r.group_id] = r.request
         else:
-            g["follows"].append(r)
+            follows_by_group.setdefault(r.group_id, []).append(r)
     pos: list[float] = []
     neg: list[float] = []
     cache: dict[str, np.ndarray] = {}
@@ -156,13 +157,10 @@ def _labelled_similarities(
             cache[text] = embedder.encode([text])[0]
         return cache[text]
 
-    pool = [g["anchor"] for g in groups.values() if g["anchor"]]
-    for g in groups.values():
-        anchor = g["anchor"]
-        if anchor is None:
-            continue
+    pool = list(anchors_by_group.values())
+    for group, anchor in anchors_by_group.items():
         va = vec(anchor)
-        for f in g["follows"]:
+        for f in follows_by_group.get(group, []):
             sim = float(va @ vec(f.request))
             if f.dup_type == "paraphrase":
                 pos.append(sim)
@@ -181,10 +179,8 @@ def _labelled_similarities(
 # ---------------------------------------------------------------- execution
 
 
-def _outcome(
-    config: str, frac: str, r: records.WorkloadRow, **fields: object
-) -> records.DecisionRow:
-    base: dict[str, object] = {
+def _outcome(config: str, frac: str, r: records.WorkloadRow, **fields: Any) -> records.DecisionRow:
+    base: dict[str, Any] = {
         "config": config,
         "frac": frac,
         "idx": r.idx,
@@ -223,7 +219,7 @@ def _chat_nonempty(
     return res.text, res.tokens_in, res.tokens_out, res.latency_s
 
 
-def _outcome_row(o: records.DecisionRow) -> dict:
+def _outcome_row(o: records.DecisionRow) -> dict[str, Any]:
     return {
         "config": o.config,
         "frac": o.frac,
@@ -256,45 +252,45 @@ def execute_config(
     run_dir: Path,
     limit: int | None = None,
 ) -> pd.DataFrame:
-    rows = load_workload(cfg, frac)
+    all_rows = load_workload(cfg, frac)
+    _tune_rows, rows = split_tune_report(all_rows, cfg.cache.tune_fraction, cfg.cache.tune_seed)
     if limit:
         rows = rows[:limit]
     run_dir.mkdir(parents=True, exist_ok=True)
     cache_path = run_dir / "cache_items.parquet"
     outcomes_path = run_dir / "outcomes.parquet"
-    attempts_path = run_dir / "attempts.json"
     done: set[str] = set()
     existing = read_parquet(outcomes_path)
     if existing is not None and len(existing):
         done = {f"{r.config}|{r.frac}|{r.idx}" for r in existing.itertuples(index=False)}
-    attempts = read_json(attempts_path) or {}
     gw = Gateway(cfg)
     cheap = cfg.models.cheap
     expensive = cfg.models.expensive
     cache = SemanticCache.load(cache_path, threshold, embedder, exact=cfg.cache.exact_match)
-    heuristic = route_for(config, cfg.router)
+    heuristic = HeuristicRouter(cfg.router) if config == "router_heuristic" else None
     cascade = CascadeRouter(cfg.router) if config == "router_cascade" else None
+
+    import time as _time
 
     for r in rows:
         key = f"{config}|{frac}|{r.idx}"
         if key in done:
             continue
-        if int(attempts.get(key, 0)) >= cfg.gateway.max_retries:
-            append_rows(
-                pd.DataFrame(
-                    [_outcome_row(_outcome(config, frac, r, error="gave up after retries"))]
-                ),
-                outcomes_path,
-            )
-            attempts[key] = 0
-            write_json(attempts, attempts_path)
-            continue
-        try:
-            out = _run_one(cfg, gw, cache, heuristic, cascade, config, frac, r, cheap, expensive)
-        except Exception:
-            attempts[key] = int(attempts.get(key, 0)) + 1
-            write_json(attempts, attempts_path)
-            raise
+        out: records.DecisionRow | None = None
+        last_error = ""
+        for attempt in range(cfg.gateway.max_retries + 1):
+            try:
+                out = _run_one(
+                    cfg, gw, cache, heuristic, cascade, config, frac, r, cheap, expensive
+                )
+                break
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+                if "content-blocked" in str(exc) or attempt >= cfg.gateway.max_retries:
+                    break
+                _time.sleep(2.0 * (attempt + 1))
+        if out is None:
+            out = _outcome(config, frac, r, error=last_error)
         if (
             config in ("cache", "router_cascade", "router_heuristic")
             and out.kind in ("model_direct", "miss")
@@ -312,7 +308,6 @@ def execute_config(
             )
         append_rows(pd.DataFrame([_outcome_row(out)]), outcomes_path)
         cache.save(cache_path)
-        attempts[key] = 0
     final = read_parquet(outcomes_path)
     assert final is not None
     return final.sort_values("idx").reset_index(drop=True)
@@ -322,8 +317,8 @@ def _run_one(
     cfg: Config,
     gw: Gateway,
     cache: SemanticCache,
-    heuristic,
-    cascade,
+    heuristic: HeuristicRouter | None,
+    cascade: CascadeRouter | None,
     config: str,
     frac: str,
     r: records.WorkloadRow,

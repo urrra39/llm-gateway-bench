@@ -8,19 +8,23 @@ gateway:
 
 generation:
   temperature: 0.0
-  max_tokens: 512
-  system_prompt: "Answer the request concisely and directly. Do not refuse and do not hedge."
+  max_tokens: 320
+  system_prompt: "Answer the request concisely, in at most three sentences. Do not refuse."
 
 # Model pair chosen on 2026-09-08 after probing every model the gateway lists:
 # claude-opus-4-8, claude-opus-5, gpt-5.6-sol were budget-quota-blocked; only
-# deepseek-v4-flash and glm-5.3 answered. Cheap = deepseek-v4-flash,
-# expensive = glm-5.3. The primary judge is the expensive model (the strongest
-# available); the secondary judge is the cheap model, for an independent family.
+# deepseek-v4-flash and glm-5.3 answered.
+# deepseek-v4-flash is the expensive tier AND the reference: its content is
+# reliable (0/7 empty in the probe) and fast. glm-5.3 is the cheap tier; it
+# produced empty content on ~15-30% of requests in the probe at any token
+# budget, which the cascade must escalate on - a measured property of the
+# cheap model, not a hidden assumption. The primary judge is the reliable
+# model; the secondary judge is the cheap model, for an independent family.
 models:
-  cheap: deepseek-v4-flash
-  expensive: glm-5.3
-  judge_primary: glm-5.3
-  judge_secondary: deepseek-v4-flash
+  cheap: glm-5.3
+  expensive: deepseek-v4-flash
+  judge_primary: deepseek-v4-flash
+  judge_secondary: glm-5.3
 
 prices:
   currency: USD
@@ -32,12 +36,12 @@ prices:
     measured quantity is tokens, and every dollar figure is this table applied
     to those tokens. Replace the table before quoting dollar savings elsewhere.
   per_million_tokens:
-    deepseek-v4-flash:
-      input_per_mtok: 0.25
-      output_per_mtok: 1.00
     glm-5.3:
-      input_per_mtok: 3.00
-      output_per_mtok: 15.00
+      input_per_mtok: 0.20
+      output_per_mtok: 1.00
+    deepseek-v4-flash:
+      input_per_mtok: 1.50
+      output_per_mtok: 6.00
 
 embeddings:
   provider: local_sentence_transformers

@@ -10,6 +10,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from lgb.config import Config
 
 DEFAULT_CONFIG = Path("config/bench.yaml")
@@ -90,7 +92,9 @@ def main(argv: list[str] | None = None) -> int:
         cfg = _cfg(args)
         embedder = Embedder(cfg.embeddings.model, cfg.embeddings.models_dir)
         threshold = cfg.cache.sim_threshold
-        tuning = run_mod.read_json(cfg.data.runs_dir / "tuning.json")
+        from lgb.store import read_json as _rj
+
+        tuning = _rj(cfg.data.runs_dir / "tuning.json")
         if tuning and "threshold" in tuning:
             threshold = float(tuning["threshold"])
         frame = run_mod.execute_config(
@@ -121,17 +125,16 @@ def main(argv: list[str] | None = None) -> int:
             print(("PASS" if g["passed"] else "FAIL"), g["name"], g["observed"])
         return 0
     if args.command == "tune-report":
-        from lgb.store import read_json
+        from lgb.store import read_json as _rj2
 
         cfg = _cfg(args)
-        record = read_json(cfg.data.runs_dir / "tuning.json")
-        print(record)
+        print(_rj2(cfg.data.runs_dir / "tuning.json") or {})
         return 0
     if args.command == "results":
         cfg = _cfg(args)
         from lgb.store import read_json
 
-        print(read_json(cfg.data.primary_results))
+        print(read_json(cfg.data.primary_results) or {})
         return 0
     if args.command == "export-human":
         from lgb import humanval
@@ -156,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     return 2  # pragma: no cover
 
 
-def read_outcomes(cfg: Config, config: str, frac: str):
+def read_outcomes(cfg: Config, config: str, frac: str) -> pd.DataFrame:
     from lgb.run import run_dir
     from lgb.store import read_parquet
 

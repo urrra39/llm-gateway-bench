@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -74,7 +75,7 @@ def judge_run(
                 return int(tok)
         return None
 
-    pending: list[dict] = []
+    pending: list[dict[str, Any]] = []
     for r in outcomes.itertuples(index=False):
         key = f"{config}|{frac}|{r.idx}"
         if key in done:
@@ -85,7 +86,7 @@ def judge_run(
             continue  # baseline missing; nothing to compare against
         answer_a = str(ref.answer_text)
         identical = answer_a == answer_b
-        row: dict = {
+        row: dict[str, Any] = {
             "config": config,
             "frac": frac,
             "idx": int(r.idx),
@@ -130,7 +131,7 @@ def judge_run(
     return final
 
 
-def kappa_report(cfg: Config) -> dict:
+def kappa_report(cfg: Config) -> dict[str, Any]:
     """Judge1 vs judge2 agreement over rows both scored, from committed files."""
     pairs: list[tuple[int, int]] = []
     for run in cfg.data.runs_dir.glob("*"):

@@ -8,6 +8,7 @@ most the in-flight row.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -47,7 +48,7 @@ def done_keys(path: Path, key_col: str) -> set[str]:
     return {str(v) for v in table[key_col].tolist()}
 
 
-def write_json(data: dict, path: Path) -> None:
+def write_json(data: dict[str, Any], path: Path) -> None:
     import json
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +57,7 @@ def write_json(data: dict, path: Path) -> None:
     tmp.replace(path)
 
 
-def read_json(path: Path) -> dict | None:
+def read_json(path: Path) -> dict[str, Any] | None:
     import json
 
     if not path.exists():

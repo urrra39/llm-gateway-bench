@@ -9,6 +9,8 @@ Validity gates are code, not prose:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -20,7 +22,8 @@ from lgb.store import read_json, read_parquet, write_json
 
 def percentiles(values: list[float]) -> dict[str, float]:
     if not values:
-        return {"p50": None, "p95": None, "p99": None, "mean": None}
+        nan = float("nan")
+        return {"p50": nan, "p95": nan, "p99": nan, "mean": nan}
     arr = np.asarray(values)
     return {
         "p50": float(np.percentile(arr, 50)),
@@ -30,7 +33,7 @@ def percentiles(values: list[float]) -> dict[str, float]:
     }
 
 
-def config_metrics(cfg: Config, config: str, frac: str) -> dict:
+def config_metrics(cfg: Config, config: str, frac: str) -> dict[str, Any]:
     out = read_parquet(run_dir(cfg, config, frac) / "outcomes.parquet")
     if out is None or not len(out):
         return {"config": config, "frac": frac, "present": False}
@@ -74,7 +77,7 @@ def config_metrics(cfg: Config, config: str, frac: str) -> dict:
     return metric
 
 
-def _quality_block(judge: pd.DataFrame | None, metric: dict) -> dict:
+def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[str, Any]:
     """Equivalence vs baseline from judge rows. Rows identical to the baseline
     are auto-scored 2 (no judge call); everything else carries a judge score.
     False hits are semantic-cache hits the judge scored 0."""
@@ -112,8 +115,8 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict) -> dict:
     return quality
 
 
-def assemble(cfg: Config, run_name: str, note: str = "") -> dict:
-    metrics: dict[str, dict] = {}
+def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
+    metrics: dict[str, dict[str, Any]] = {}
     for frac_cfg in cfg.workload.duplicate_fractions:
         frac = frac_cfg.name
         for config in CONFIGS:

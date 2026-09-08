@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,8 +19,8 @@ import pandas as pd
 from lgb.store import read_parquet
 
 
-def export_human_csv(cfg, out_path: Path, limit: int = 60) -> Path:
-    rows: list[dict] = []
+def export_human_csv(cfg: Any, out_path: Path, limit: int = 60) -> Path:
+    rows: list[dict[str, Any]] = []
     for run in sorted((cfg.data.runs_dir).glob("*")):
         judge = read_parquet(run / "judge.parquet")
         if judge is None:
@@ -44,14 +45,14 @@ def export_human_csv(cfg, out_path: Path, limit: int = 60) -> Path:
         frame.to_csv(out_path, index=False)
         return out_path
 
-    def priority(r: dict) -> tuple[int, int, str]:
+    def priority(r: dict[str, Any]) -> tuple[int, int, str]:
         j1 = r["judge1_score"]
         j2 = r["judge2_score"]
         false_hit = 0 if (isinstance(j1, int) and j1 == 0) else 1
         disagreement = 0 if (isinstance(j1, int) and isinstance(j2, int) and j1 != j2) else 1
         return (false_hit, disagreement, r["dup_type"])
 
-    records = [dict(x) for x in rows]
+    records: list[dict[str, Any]] = [dict(x) for x in rows]
     records.sort(key=priority)
     chosen = records[:limit]
     out = pd.DataFrame(chosen)
@@ -63,7 +64,7 @@ def _cell(v: object) -> str:
     return "" if v is None else str(v)
 
 
-def human_agreement(csv_path: Path) -> dict:
+def human_agreement(csv_path: Path) -> dict[str, Any]:
     with csv_path.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
     human = [str(r.get("human_label", "")).strip().lower() for r in rows]
@@ -74,16 +75,17 @@ def human_agreement(csv_path: Path) -> dict:
     ]
     if invalid:
         raise ValueError(f"{len(invalid)} rows have unrecognised human labels")
-    report: dict = {"path": str(csv_path), "n_rows": len(rows)}
+    report: dict[str, Any] = {"path": str(csv_path), "n_rows": len(rows)}
     for col in ("judge1_score", "judge2_score"):
-        a, b = [], []
+        machine_scores: list[str] = []
+        human_scores: list[str] = []
         for r, h in zip(rows, human, strict=True):
             machine = str(r.get(col, "")).strip()
             if not h or not machine:
                 continue
-            a.append(_norm(machine))
-            b.append(_norm(h))
-        report[f"{col}_vs_human"] = _agreement(a, b)
+            machine_scores.append(_norm(machine))
+            human_scores.append(_norm(h))
+        report[f"{col}_vs_human"] = _agreement(machine_scores, human_scores)
     return report
 
 
@@ -99,15 +101,15 @@ def _norm(v: str) -> str:
     return mapping.get(v, v)
 
 
-def _agreement(a: list[str], b: list[str]) -> dict:
-    if not a:
+def _agreement(machine: list[str], human: list[str]) -> dict[str, Any]:
+    if not machine:
         return {"n": 0, "observed": None, "kappa": None}
-    a = np.asarray(a)
-    b = np.asarray(b)
-    observed = float((a == b).mean())
-    cats = sorted(set(a) | set(b))
-    pa = {c: float((a == c).mean()) for c in cats}
-    pb = {c: float((b == c).mean()) for c in cats}
+    ma = np.asarray(machine)
+    ha = np.asarray(human)
+    observed = float((ma == ha).mean())
+    cats = sorted(set(machine) | set(human))
+    pa = {c: float((ma == c).mean()) for c in cats}
+    pb = {c: float((ha == c).mean()) for c in cats}
     expected = sum(pa[c] * pb[c] for c in cats)
     kappa = (observed - expected) / (1 - expected) if expected < 1.0 else math.nan
-    return {"n": len(a), "observed": round(observed, 4), "kappa": round(float(kappa), 4)}
+    return {"n": len(machine), "observed": round(observed, 4), "kappa": round(float(kappa), 4)}

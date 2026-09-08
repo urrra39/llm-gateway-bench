@@ -8,6 +8,7 @@ headers and logged to data/live/.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from fastapi import FastAPI, Request
 
@@ -26,7 +27,7 @@ def build_app(cfg: Config) -> FastAPI:
     cascade = CascadeRouter(cfg.router)
 
     @app.get("/health")
-    def health() -> dict:
+    def health() -> dict[str, Any]:
         return {"ok": True, "cache_size": len(cache)}
 
     @app.post("/v1/chat/completions")
@@ -39,7 +40,7 @@ def build_app(cfg: Config) -> FastAPI:
         mode = request.headers.get("x-bench-mode", "router")  # router | cache | expensive
         model_name = body.get("model", cfg.models.expensive)
         started = time.perf_counter()
-        decision = {"mode": mode, "hit": False, "similarity": None}
+        decision: dict[str, object] = {"mode": mode, "hit": False, "similarity": None}
 
         if mode != "expensive":
             look = cache.lookup(user_text)
