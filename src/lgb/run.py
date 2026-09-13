@@ -3,11 +3,23 @@ metrics and validity gates.
 
 All stages are resumable: derived tables are parquet written atomically and a
 stage processes only the rows that are not yet done.
+
+Execution is concurrent but order-preserving for the cache. The workload's
+meaningful structure is "an anchor request precedes its paraphrase / trap /
+exact repeat", and a paraphrase must observe the anchor's stored answer to be
+a hit. A naive thread pool would start a paraphrase before its anchor finished
+and turn intended hits into misses, making the hit rate depend on thread
+scheduling. So rows are dispatched only when their dependencies (the group's
+anchor row, always an earlier novel row) have completed; independent groups
+run in parallel. Cache reads, writes and the outcomes append are serialised by
+one lock.
 """
 
 from __future__ import annotations
 
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -243,6 +255,43 @@ def _outcome_row(o: records.DecisionRow) -> dict[str, Any]:
     }
 
 
+def _anchor_dependencies(rows: list[records.WorkloadRow]) -> dict[int, int | None]:
+    """Map each row's idx to the idx of the row it must follow, or None for a
+    novel row. Every paraphrase/trap/exact has exactly one anchor: the novel
+    row of its group, which the workload builder guarantees appears earlier."""
+    novel_by_group: dict[str, int] = {}
+    for r in rows:
+        if r.dup_type == "novel":
+            novel_by_group[r.group_id] = r.idx
+    deps: dict[int, int | None] = {}
+    for r in rows:
+        if r.dup_type == "novel":
+            deps[r.idx] = None
+        else:
+            deps[r.idx] = novel_by_group.get(r.group_id)
+    return deps
+
+
+def _schedule(rows: list[records.WorkloadRow]) -> list[records.WorkloadRow]:
+    """A dispatch order that keeps every anchor ahead of its followers but
+    otherwise preserves workload order. Used only for diagnostics; the executor
+    dispatches by dependency completion."""
+    deps = _anchor_dependencies(rows)
+    placed: set[int] = set()
+    out: list[records.WorkloadRow] = []
+    remaining = list(rows)
+    while remaining:
+        for r in list(remaining):
+            dep = deps[r.idx]
+            if dep is None or dep in placed:
+                out.append(r)
+                placed.add(r.idx)
+                remaining.remove(r)
+        if not out or len(placed) == len(rows):
+            break
+    return out
+
+
 def execute_config(
     cfg: Config,
     config: str,
@@ -251,6 +300,7 @@ def execute_config(
     embedder: Embedder,
     run_dir: Path,
     limit: int | None = None,
+    workers: int | None = None,
 ) -> pd.DataFrame:
     all_rows = load_workload(cfg, frac)
     _tune_rows, rows = split_tune_report(all_rows, cfg.cache.tune_fraction, cfg.cache.tune_seed)
@@ -269,17 +319,19 @@ def execute_config(
     cache = SemanticCache.load(cache_path, threshold, embedder, exact=cfg.cache.exact_match)
     heuristic = HeuristicRouter(cfg.router) if config == "router_heuristic" else None
     cascade = CascadeRouter(cfg.router) if config == "router_cascade" else None
+    n_workers = workers if workers is not None else cfg.gateway.concurrency
+    lock = threading.Lock()
+    pending = [r for r in rows if f"{config}|{frac}|{r.idx}" not in done]
+    deps = _anchor_dependencies(pending)
+    completed: set[int] = set()
 
-    import time as _time
-
-    for r in rows:
-        key = f"{config}|{frac}|{r.idx}"
-        if key in done:
-            continue
+    def process(r: records.WorkloadRow) -> None:
         out: records.DecisionRow | None = None
         last_error = ""
         for attempt in range(cfg.gateway.max_retries + 1):
             try:
+                # The model call runs without the executor lock; the cache guards
+                # its own reads/writes internally.
                 out = _run_one(
                     cfg, gw, cache, heuristic, cascade, config, frac, r, cheap, expensive
                 )
@@ -288,26 +340,56 @@ def execute_config(
                 last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
                 if "content-blocked" in str(exc) or attempt >= cfg.gateway.max_retries:
                     break
-                _time.sleep(2.0 * (attempt + 1))
+                time.sleep(2.0 * (attempt + 1))
         if out is None:
             out = _outcome(config, frac, r, error=last_error)
-        if (
-            config in ("cache", "router_cascade", "router_heuristic")
-            and out.kind in ("model_direct", "miss")
-            and out.answer_text.strip()
-            and out.error is None
-        ):
-            cache.add(
-                CacheItem(
-                    idx=r.idx,
-                    request=r.request,
-                    group_id=r.group_id,
-                    answer_text=out.answer_text,
-                    model=out.served_by,
+        with lock:
+            if (
+                config in ("cache", "router_cascade", "router_heuristic")
+                and out.kind in ("model_direct", "miss")
+                and out.answer_text.strip()
+                and out.error is None
+            ):
+                cache.add(
+                    CacheItem(
+                        idx=r.idx,
+                        request=r.request,
+                        group_id=r.group_id,
+                        answer_text=out.answer_text,
+                        model=out.served_by,
+                    )
                 )
-            )
-        append_rows(pd.DataFrame([_outcome_row(out)]), outcomes_path)
-        cache.save(cache_path)
+            append_rows(pd.DataFrame([_outcome_row(out)]), outcomes_path)
+            cache.save(cache_path)
+            completed.add(r.idx)
+
+    def next_ready() -> records.WorkloadRow | None:
+        with lock:
+            for r in pending:
+                if r.idx in completed:
+                    continue
+                dep = deps[r.idx]
+                if dep is None or dep in completed:
+                    pending.remove(r)
+                    return r
+        return None
+
+    if n_workers > 1 and len(pending) > 1:
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = []
+            while True:
+                r = next_ready()
+                if r is None:
+                    if all(p.idx in completed for p in pending) or not pending:
+                        break
+                    time.sleep(0.05)
+                    continue
+                futures.append(pool.submit(process, r))
+            for f in futures:
+                f.result()
+    else:
+        for r in pending:
+            process(r)
     final = read_parquet(outcomes_path)
     assert final is not None
     return final.sort_values("idx").reset_index(drop=True)

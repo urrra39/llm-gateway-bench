@@ -39,6 +39,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     run.add_argument("--frac", required=True, choices=("low", "high"))
     run.add_argument("--limit", type=int, default=None, help="stop after N rows (pilot)")
+    run.add_argument(
+        "--workers", type=int, default=None, help="parallel workers; defaults to config"
+    )
 
     judge = sub.add_parser("judge", help="judge one config's responses against baseline")
     judge.add_argument(
@@ -105,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             embedder,
             run_mod.run_dir(cfg, args.run_config, args.frac),
             limit=args.limit,
+            workers=args.workers,
         )
         print(f"wrote {len(frame)} outcomes to {run_mod.run_dir(cfg, args.run_config, args.frac)}")
         return 0

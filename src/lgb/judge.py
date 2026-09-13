@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import math
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -81,15 +83,11 @@ def judge_run(
         m = re.search(r"(?<!\d)[012](?!\d)", text)
         return int(m.group(0)) if m else None
 
-    pending: list[dict[str, Any]] = []
-    for r in outcomes.itertuples(index=False):
-        key = f"{config}|{frac}|{r.idx}"
-        if key in done:
-            continue
+    def judge_one(r: Any) -> dict[str, Any] | None:
         ref = baseline_by_idx.get(int(r.idx))
         answer_b = str(r.answer_text)
         if ref is None or not str(ref.answer_text).strip():
-            continue  # baseline missing; nothing to compare against
+            return None  # baseline missing; nothing to compare against
         answer_a = str(ref.answer_text)
         identical = answer_a == answer_b
         row: dict[str, Any] = {
@@ -112,26 +110,42 @@ def judge_run(
         if identical:
             row["judge1_score"] = 2
             row["note"] = "identical to baseline, no judge call"
-        else:
-            text1 = gw.chat(
-                primary, prompt(str(r.request), answer_a, answer_b), max_tokens=judge_cfg.max_tokens
+            return row
+        text1 = gw.chat(
+            primary, prompt(str(r.request), answer_a, answer_b), max_tokens=judge_cfg.max_tokens
+        ).text
+        row["judge1_raw"] = text1
+        row["judge1_score"] = parse(text1)
+        if row["sampled_for_judge2"]:
+            text2 = gw.chat(
+                secondary,
+                prompt(str(r.request), answer_a, answer_b),
+                max_tokens=judge_cfg.max_tokens,
             ).text
-            row["judge1_raw"] = text1
-            row["judge1_score"] = parse(text1)
-            if row["sampled_for_judge2"]:
-                text2 = gw.chat(
-                    secondary,
-                    prompt(str(r.request), answer_a, answer_b),
-                    max_tokens=judge_cfg.max_tokens,
-                ).text
-                row["judge2_raw"] = text2
-                row["judge2_score"] = parse(text2)
-        pending.append(row)
-        if len(pending) >= 20:
-            append_rows(pd.DataFrame(pending), judge_path)
-            pending.clear()
-    if pending:
-        append_rows(pd.DataFrame(pending), judge_path)
+            row["judge2_raw"] = text2
+            row["judge2_score"] = parse(text2)
+        return row
+
+    lock = threading.Lock()
+    collected: list[dict[str, Any]] = []
+    work = [r for r in outcomes.itertuples(index=False) if f"{config}|{frac}|{r.idx}" not in done]
+    n_workers = cfg.gateway.concurrency
+
+    def worker(r: Any) -> None:
+        row = judge_one(r)
+        if row is None:
+            return
+        with lock:
+            collected.append(row)
+            if len(collected) >= 20:
+                append_rows(pd.DataFrame(collected), judge_path)
+                collected.clear()
+
+    if work:
+        with ThreadPoolExecutor(max_workers=max(1, n_workers)) as pool:
+            list(pool.map(worker, work))
+    if collected:
+        append_rows(pd.DataFrame(collected), judge_path)
     final = read_parquet(judge_path)
     assert final is not None
     return final

@@ -1,0 +1,24 @@
+{
+  "control_f1": 0.9042145593869731,
+  "control_stats": {
+    "fn": 0,
+    "fp": 25,
+    "precision": 0.8251748251748252,
+    "recall": 1.0,
+    "tn": 118,
+    "tp": 118
+  },
+  "n_negatives": 143,
+  "n_positives": 118,
+  "threshold": 0.3919,
+  "tune_stats": {
+    "fn": 0,
+    "fp": 25,
+    "precision": 0.8251748251748252,
+    "recall": 1.0,
+    "tn": 118,
+    "tp": 118
+  },
+  "tuned_beats_control": true,
+  "tuned_f1": 0.9042145593869731
+}

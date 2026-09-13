@@ -11,6 +11,7 @@ rows that are reported.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,21 +51,27 @@ class SemanticCache:
     _vectors: np.ndarray | None = None
     last_embed_ms: float = 0.0
     last_lookup_ms: float = 0.0
+    #: Guards items/_vectors so concurrent lookups and adds (the benchmark runs
+    #: several model calls in parallel) stay consistent. An RLock because the
+    #: public methods are called from code that may already hold it.
+    _lock: threading.RLock = field(default_factory=threading.RLock)
 
     # -- exact index ------------------------------------------------
     def _exact_index(self) -> dict[str, int]:
         return {normalize_exact(i.request): i.idx for i in self.items}
 
     def add(self, item: CacheItem) -> None:
-        self.items.append(item)
-        if self._vectors is not None and self.embedder is not None:
-            vec = self.embedder.encode([item.request])[0]
-            self._vectors = np.vstack([self._vectors, vec])
-        else:
-            self._vectors = None
+        with self._lock:
+            self.items.append(item)
+            if self._vectors is not None and self.embedder is not None:
+                vec = self.embedder.encode([item.request])[0]
+                self._vectors = np.vstack([self._vectors, vec])
+            else:
+                self._vectors = None
 
     def __len__(self) -> int:
-        return len(self.items)
+        with self._lock:
+            return len(self.items)
 
     def _stored_vectors(self) -> np.ndarray:
         if self._vectors is None or self._vectors.shape[0] != len(self.items):
@@ -76,46 +83,48 @@ class SemanticCache:
     def lookup(self, request: str) -> LookupResult:
         import time as _time
 
-        start = _time.perf_counter()
-        if self.exact and not self.items:
-            return LookupResult("miss", 0.0, None)
-        if self.exact:
-            hit = self._exact_index().get(normalize_exact(request))
-            if hit is not None:
-                self.last_embed_ms = 0.0
-                self.last_lookup_ms = (_time.perf_counter() - start) * 1000.0
-                return LookupResult("cache_exact", 1.0, hit)
-        if self.embedder is None or not self.items:
-            return LookupResult("miss", 0.0, None)
-        stored = self._stored_vectors()
-        e_start = _time.perf_counter()
-        q = self.embedder.encode([request])[0]
-        embed_ms = (_time.perf_counter() - e_start) * 1000.0
-        sims = stored @ q
-        best = int(np.argmax(sims))
-        self.last_embed_ms = embed_ms
-        self.last_lookup_ms = (_time.perf_counter() - start) * 1000.0
-        if float(sims[best]) >= self.threshold:
-            return LookupResult("cache_semantic", float(sims[best]), self.items[best].idx)
-        return LookupResult("miss", float(sims[best]), None)
+        with self._lock:
+            start = _time.perf_counter()
+            if self.exact and not self.items:
+                return LookupResult("miss", 0.0, None)
+            if self.exact:
+                hit = self._exact_index().get(normalize_exact(request))
+                if hit is not None:
+                    self.last_embed_ms = 0.0
+                    self.last_lookup_ms = (_time.perf_counter() - start) * 1000.0
+                    return LookupResult("cache_exact", 1.0, hit)
+            if self.embedder is None or not self.items:
+                return LookupResult("miss", 0.0, None)
+            stored = self._stored_vectors()
+            e_start = _time.perf_counter()
+            q = self.embedder.encode([request])[0]
+            embed_ms = (_time.perf_counter() - e_start) * 1000.0
+            sims = stored @ q
+            best = int(np.argmax(sims))
+            self.last_embed_ms = embed_ms
+            self.last_lookup_ms = (_time.perf_counter() - start) * 1000.0
+            if float(sims[best]) >= self.threshold:
+                return LookupResult("cache_semantic", float(sims[best]), self.items[best].idx)
+            return LookupResult("miss", float(sims[best]), None)
 
     def save(self, path: Path) -> None:
-        if not self.items:
-            write_parquet(pd.DataFrame(), path)
-            return
-        frame = pd.DataFrame(
-            [
-                {
-                    "idx": i.idx,
-                    "request": i.request,
-                    "group_id": i.group_id,
-                    "answer_text": i.answer_text,
-                    "model": i.model,
-                }
-                for i in self.items
-            ]
-        )
-        write_parquet(frame, path)
+        with self._lock:
+            if not self.items:
+                write_parquet(pd.DataFrame(), path)
+                return
+            frame = pd.DataFrame(
+                [
+                    {
+                        "idx": i.idx,
+                        "request": i.request,
+                        "group_id": i.group_id,
+                        "answer_text": i.answer_text,
+                        "model": i.model,
+                    }
+                    for i in self.items
+                ]
+            )
+            write_parquet(frame, path)
 
     @classmethod
     def load(

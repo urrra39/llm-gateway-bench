@@ -132,10 +132,19 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
         frac = f.name
         for config in ("cache", "router_cascade", "router_heuristic"):
             m = metrics[f"{frac}_{config}"]
+            if not (m["present"] and baseline_cost[frac] is not None):
+                gates.append(
+                    {
+                        "name": f"baseline_costs_more_{frac}_{config}",
+                        "passed": False,
+                        "observed": "run not present (resume incomplete)",
+                    }
+                )
+                continue
             gates.append(
                 {
                     "name": f"baseline_costs_more_{frac}_{config}",
-                    "passed": m["present"] and m["cost_usd"] < baseline_cost[frac],
+                    "passed": m["cost_usd"] < baseline_cost[frac],
                     "observed": (
                         f"baseline {baseline_cost[frac]:.4f} vs {config} {m['cost_usd']:.4f}"
                     ),
@@ -150,10 +159,14 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
             }
         )
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}
+    # Strictly greater: an equal F1 means the tuning picked a point no better
+    # than a random 0.5 threshold, which is a published failure, not a pass.
     gates.append(
         {
             "name": "tuned_threshold_beats_random_control",
-            "passed": bool(tuning.get("tuned_beats_control")),
+            "passed": bool(tuning.get("tuned_f1"))
+            and bool(tuning.get("control_f1"))
+            and float(tuning["tuned_f1"]) > float(tuning["control_f1"]),
             "observed": (
                 f"tuned {tuning.get('threshold')} f1 {tuning.get('tuned_f1')} "
                 f"vs control {tuning.get('control_f1')}"
