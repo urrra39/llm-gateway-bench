@@ -20,6 +20,20 @@ from lgb.run import CONFIGS, run_dir
 from lgb.store import read_json, read_parquet, write_json
 
 
+def _has_error(value: Any) -> bool:
+    """True when an outcome row carries a real error string.
+
+    Parquet restores a null `error` as NaN, and `bool(nan)` is True, so a plain
+    truthiness test silently reclassifies every successful row as an error and
+    drops its cost and latency from the metrics. Missing means no error.
+    """
+    if value is None:
+        return False
+    if isinstance(value, float) and np.isnan(value):
+        return False
+    return bool(str(value).strip()) and str(value).strip().lower() != "nan"
+
+
 def percentiles(values: list[float]) -> dict[str, float]:
     if not values:
         nan = float("nan")
@@ -39,8 +53,8 @@ def config_metrics(cfg: Config, config: str, frac: str) -> dict[str, Any]:
         return {"config": config, "frac": frac, "present": False}
     judge = read_parquet(run_dir(cfg, config, frac) / "judge.parquet")
     rows = list(out.itertuples(index=False))
-    errors = [r for r in rows if r.error]
-    ok = [r for r in rows if not r.error]
+    errors = [r for r in rows if _has_error(r.error)]
+    ok = [r for r in rows if not _has_error(r.error)]
     latencies = [float(r.latency_ms) for r in ok]
     # warm = every request except the first (first includes cold connection)
     warm = latencies[1:] if len(latencies) > 1 else []
@@ -154,8 +168,8 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
         gates.append(
             {
                 "name": f"false_hit_rate_reported_{frac}",
-                "passed": cm["present"] and cm["false_hit_rate"] is not None,
-                "observed": str(cm["false_hit_rate"]),
+                "passed": bool(cm.get("present")) and cm.get("false_hit_rate") is not None,
+                "observed": str(cm.get("false_hit_rate")),
             }
         )
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}

@@ -1,0 +1,259 @@
+{
+  "all_gates_passed": false,
+  "environment": {
+    "cache_threshold": 0.86,
+    "concurrency": 4,
+    "gateway_base_url": "http://127.0.0.1:8787/v1",
+    "models": {
+      "cheap": "glm-5.3",
+      "expensive": "deepseek-v4-flash",
+      "judge_primary": "deepseek-v4-flash",
+      "judge_secondary": "glm-5.3"
+    },
+    "prices": {
+      "as_of": "2026-09-08",
+      "basis": "Assumed tiering, not a provider quote. The dev gateway reports token usage but no price and no spend. Prices per million tokens below are input assumptions chosen to reflect a cheap-flash / expensive-frontier split; the measured quantity is tokens, and every dollar figure is this table applied to those tokens. Replace the table before quoting dollar savings elsewhere.\n",
+      "per_million_tokens": {
+        "deepseek-v4-flash": {
+          "input_per_mtok": 1.5,
+          "output_per_mtok": 6.0
+        },
+        "glm-5.3": {
+          "input_per_mtok": 0.2,
+          "output_per_mtok": 1.0
+        }
+      }
+    }
+  },
+  "gates": [
+    {
+      "name": "baseline_costs_more_low_cache",
+      "observed": "baseline 0.0815 vs cache 0.0550",
+      "passed": true
+    },
+    {
+      "name": "baseline_costs_more_low_router_cascade",
+      "observed": "baseline 0.0815 vs router_cascade 0.0099",
+      "passed": true
+    },
+    {
+      "name": "baseline_costs_more_low_router_heuristic",
+      "observed": "baseline 0.0815 vs router_heuristic 0.0090",
+      "passed": true
+    },
+    {
+      "name": "false_hit_rate_reported_low",
+      "observed": "0.0",
+      "passed": true
+    },
+    {
+      "name": "baseline_costs_more_high_cache",
+      "observed": "run not present (resume incomplete)",
+      "passed": false
+    },
+    {
+      "name": "baseline_costs_more_high_router_cascade",
+      "observed": "run not present (resume incomplete)",
+      "passed": false
+    },
+    {
+      "name": "baseline_costs_more_high_router_heuristic",
+      "observed": "run not present (resume incomplete)",
+      "passed": false
+    },
+    {
+      "name": "false_hit_rate_reported_high",
+      "observed": "None",
+      "passed": false
+    },
+    {
+      "name": "tuned_threshold_beats_random_control",
+      "observed": "tuned 0.3919 f1 0.9042145593869731 vs control 0.9042145593869731",
+      "passed": false
+    }
+  ],
+  "kappa": {
+    "expected": 0.6619,
+    "kappa": 0.8732,
+    "n": 140,
+    "observed": 0.9571
+  },
+  "metrics": {
+    "high_baseline": {
+      "config": "baseline",
+      "frac": "high",
+      "present": false
+    },
+    "high_cache": {
+      "config": "cache",
+      "frac": "high",
+      "present": false
+    },
+    "high_router_cascade": {
+      "config": "router_cascade",
+      "frac": "high",
+      "present": false
+    },
+    "high_router_heuristic": {
+      "config": "router_heuristic",
+      "frac": "high",
+      "present": false
+    },
+    "low_baseline": {
+      "cache_exact_hits": 0,
+      "cache_misses": 47,
+      "cache_semantic_hits": 0,
+      "cheap_calls": 0,
+      "config": "baseline",
+      "cost_usd": 0.08150249999999998,
+      "expensive_calls": 47,
+      "false_hit_rate": null,
+      "first_latency_ms": 2835.7522090009297,
+      "frac": "low",
+      "hit_rate": 0.0,
+      "judged_rows": 0,
+      "latency": {
+        "mean": 3956.9105136090557,
+        "p50": 3629.805666496395,
+        "p95": 6337.8988127551565,
+        "p99": 7635.437876748616
+      },
+      "n_errors": 3,
+      "n_rows": 47,
+      "per_request_latency_note": "warm percentiles exclude the first request",
+      "present": true,
+      "quality_by_dup": {},
+      "quality_equiv": null,
+      "tokens_in": 2443,
+      "tokens_out": 12973
+    },
+    "low_cache": {
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
+      "cheap_calls": 0,
+      "config": "cache",
+      "cost_usd": 0.0550395,
+      "expensive_calls": 38,
+      "false_hit_rate": 0.0,
+      "false_hit_rows": [],
+      "first_latency_ms": 2377.6803750006366,
+      "frac": "low",
+      "hit_rate": 0.2245,
+      "judged_rows": 47,
+      "latency": {
+        "mean": 3102.7555529168844,
+        "p50": 3322.511978498369,
+        "p95": 4839.296929149714,
+        "p99": 11646.81510524294
+      },
+      "mean_score": 1.6383,
+      "n_errors": 1,
+      "n_rows": 49,
+      "per_request_latency_note": "warm percentiles exclude the first request",
+      "present": true,
+      "quality_by_dup": {
+        "exact": 1.0,
+        "novel": 0.8068,
+        "paraphrase": 1.0
+      },
+      "quality_equiv": 0.8191,
+      "tokens_in": 1961,
+      "tokens_out": 8683
+    },
+    "low_router_cascade": {
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
+      "cheap_calls": 35,
+      "config": "router_cascade",
+      "cost_usd": 0.009891799999999997,
+      "expensive_calls": 3,
+      "false_hit_rate": 0.0,
+      "false_hit_rows": [],
+      "first_latency_ms": 2767.2297500030254,
+      "frac": "low",
+      "hit_rate": 0.2245,
+      "judged_rows": 47,
+      "latency": {
+        "mean": 3563.3145390202117,
+        "p50": 3044.362145497871,
+        "p95": 8590.818376652533,
+        "p99": 16389.114501272357
+      },
+      "mean_score": 1.6383,
+      "n_errors": 1,
+      "n_rows": 49,
+      "per_request_latency_note": "warm percentiles exclude the first request",
+      "present": true,
+      "quality_by_dup": {
+        "exact": 1.0,
+        "novel": 0.8068,
+        "paraphrase": 1.0
+      },
+      "quality_equiv": 0.8191,
+      "tokens_in": 2448,
+      "tokens_out": 4873
+    },
+    "low_router_heuristic": {
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
+      "cheap_calls": 35,
+      "config": "router_heuristic",
+      "cost_usd": 0.0090148,
+      "expensive_calls": 3,
+      "false_hit_rate": 0.0,
+      "false_hit_rows": [],
+      "first_latency_ms": 3308.859290998953,
+      "frac": "low",
+      "hit_rate": 0.2245,
+      "judged_rows": 47,
+      "latency": {
+        "mean": 4583.9908064576775,
+        "p50": 3340.924770498532,
+        "p95": 5729.239872796461,
+        "p99": 47143.262766744294
+      },
+      "mean_score": NaN,
+      "n_errors": 1,
+      "n_rows": 49,
+      "per_request_latency_note": "warm percentiles exclude the first request",
+      "present": true,
+      "quality_by_dup": {
+        "exact": 1.0,
+        "novel": NaN,
+        "paraphrase": 1.0
+      },
+      "quality_equiv": NaN,
+      "tokens_in": 2285,
+      "tokens_out": 4443
+    }
+  },
+  "note": "50-request pilot, low duplicate fraction",
+  "run_name": "pilot_low_50",
+  "tuning": {
+    "control_f1": 0.9042145593869731,
+    "control_stats": {
+      "fn": 0,
+      "fp": 25,
+      "precision": 0.8251748251748252,
+      "recall": 1.0,
+      "tn": 118,
+      "tp": 118
+    },
+    "n_negatives": 143,
+    "n_positives": 118,
+    "threshold": 0.3919,
+    "tune_stats": {
+      "fn": 0,
+      "fp": 25,
+      "precision": 0.8251748251748252,
+      "recall": 1.0,
+      "tn": 118,
+      "tp": 118
+    },
+    "tuned_beats_control": true,
+    "tuned_f1": 0.9042145593869731
+  }
+}

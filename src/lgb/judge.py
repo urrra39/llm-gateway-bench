@@ -162,7 +162,14 @@ def kappa_report(cfg: Config) -> dict[str, Any]:
             a, b = r.judge1_score, r.judge2_score
             if a is None or b is None:
                 continue
-            pairs.append((int(a), int(b)))
+            # parquet restores a missing integer as NaN, which is not None
+            try:
+                fa, fb = float(a), float(b)
+            except (TypeError, ValueError):
+                continue
+            if math.isnan(fa) or math.isnan(fb):
+                continue
+            pairs.append((int(fa), int(fb)))
     if not pairs:
         return {"kappa": None, "n": 0, "observed": None, "note": "no double-scored rows"}
     a = np.asarray([p[0] for p in pairs])
