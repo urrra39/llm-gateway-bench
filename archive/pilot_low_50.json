@@ -28,23 +28,23 @@
   "gates": [
     {
       "name": "baseline_costs_more_low_cache",
-      "observed": "baseline 0.0000 vs cache 0.0000",
-      "passed": false
+      "observed": "baseline 0.0815 vs cache 0.0550",
+      "passed": true
     },
     {
       "name": "baseline_costs_more_low_router_cascade",
-      "observed": "baseline 0.0000 vs router_cascade 0.0000",
-      "passed": false
+      "observed": "baseline 0.0815 vs router_cascade 0.0099",
+      "passed": true
     },
     {
       "name": "baseline_costs_more_low_router_heuristic",
-      "observed": "baseline 0.0000 vs router_heuristic 0.0000",
-      "passed": false
+      "observed": "baseline 0.0815 vs router_heuristic 0.0090",
+      "passed": true
     },
     {
       "name": "false_hit_rate_reported_low",
-      "observed": "None",
-      "passed": false
+      "observed": "0.0",
+      "passed": true
     },
     {
       "name": "baseline_costs_more_high_cache",
@@ -101,55 +101,55 @@
     },
     "low_baseline": {
       "cache_exact_hits": 0,
-      "cache_misses": 0,
+      "cache_misses": 47,
       "cache_semantic_hits": 0,
       "cheap_calls": 0,
       "config": "baseline",
-      "cost_usd": 0.0,
-      "expensive_calls": 0,
+      "cost_usd": 0.08150249999999998,
+      "expensive_calls": 47,
       "false_hit_rate": null,
-      "first_latency_ms": null,
+      "first_latency_ms": 2835.7522090009297,
       "frac": "low",
       "hit_rate": 0.0,
       "judged_rows": 0,
       "latency": {
-        "mean": NaN,
-        "p50": NaN,
-        "p95": NaN,
-        "p99": NaN
+        "mean": 3956.9105136090557,
+        "p50": 3629.805666496395,
+        "p95": 6337.8988127551565,
+        "p99": 7635.437876748616
       },
-      "n_errors": 50,
-      "n_rows": 0,
+      "n_errors": 3,
+      "n_rows": 47,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {},
       "quality_equiv": null,
-      "tokens_in": 0,
-      "tokens_out": 0
+      "tokens_in": 2443,
+      "tokens_out": 12973
     },
     "low_cache": {
-      "cache_exact_hits": 0,
-      "cache_misses": 0,
-      "cache_semantic_hits": 0,
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
       "cheap_calls": 0,
       "config": "cache",
-      "cost_usd": 0.0,
-      "expensive_calls": 0,
-      "false_hit_rate": null,
+      "cost_usd": 0.0550395,
+      "expensive_calls": 38,
+      "false_hit_rate": 0.0,
       "false_hit_rows": [],
-      "first_latency_ms": null,
+      "first_latency_ms": 2377.6803750006366,
       "frac": "low",
-      "hit_rate": 0.0,
+      "hit_rate": 0.2245,
       "judged_rows": 47,
       "latency": {
-        "mean": NaN,
-        "p50": NaN,
-        "p95": NaN,
-        "p99": NaN
+        "mean": 3102.7555529168844,
+        "p50": 3322.511978498369,
+        "p95": 4839.296929149714,
+        "p99": 11646.81510524294
       },
       "mean_score": 1.6383,
-      "n_errors": 50,
-      "n_rows": 0,
+      "n_errors": 1,
+      "n_rows": 49,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {
@@ -158,32 +158,32 @@
         "paraphrase": 1.0
       },
       "quality_equiv": 0.8191,
-      "tokens_in": 0,
-      "tokens_out": 0
+      "tokens_in": 1961,
+      "tokens_out": 8683
     },
     "low_router_cascade": {
-      "cache_exact_hits": 0,
-      "cache_misses": 0,
-      "cache_semantic_hits": 0,
-      "cheap_calls": 0,
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
+      "cheap_calls": 35,
       "config": "router_cascade",
-      "cost_usd": 0.0,
-      "expensive_calls": 0,
-      "false_hit_rate": null,
+      "cost_usd": 0.009891799999999997,
+      "expensive_calls": 3,
+      "false_hit_rate": 0.0,
       "false_hit_rows": [],
-      "first_latency_ms": null,
+      "first_latency_ms": 2767.2297500030254,
       "frac": "low",
-      "hit_rate": 0.0,
+      "hit_rate": 0.2245,
       "judged_rows": 47,
       "latency": {
-        "mean": NaN,
-        "p50": NaN,
-        "p95": NaN,
-        "p99": NaN
+        "mean": 3563.3145390202117,
+        "p50": 3044.362145497871,
+        "p95": 8590.818376652533,
+        "p99": 16389.114501272357
       },
       "mean_score": 1.6383,
-      "n_errors": 50,
-      "n_rows": 0,
+      "n_errors": 1,
+      "n_rows": 49,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {
@@ -192,32 +192,32 @@
         "paraphrase": 1.0
       },
       "quality_equiv": 0.8191,
-      "tokens_in": 0,
-      "tokens_out": 0
+      "tokens_in": 2448,
+      "tokens_out": 4873
     },
     "low_router_heuristic": {
-      "cache_exact_hits": 0,
-      "cache_misses": 0,
-      "cache_semantic_hits": 0,
-      "cheap_calls": 0,
+      "cache_exact_hits": 2,
+      "cache_misses": 38,
+      "cache_semantic_hits": 9,
+      "cheap_calls": 35,
       "config": "router_heuristic",
-      "cost_usd": 0.0,
-      "expensive_calls": 0,
-      "false_hit_rate": null,
+      "cost_usd": 0.0090148,
+      "expensive_calls": 3,
+      "false_hit_rate": 0.0,
       "false_hit_rows": [],
-      "first_latency_ms": null,
+      "first_latency_ms": 3308.859290998953,
       "frac": "low",
-      "hit_rate": 0.0,
+      "hit_rate": 0.2245,
       "judged_rows": 47,
       "latency": {
-        "mean": NaN,
-        "p50": NaN,
-        "p95": NaN,
-        "p99": NaN
+        "mean": 4583.9908064576775,
+        "p50": 3340.924770498532,
+        "p95": 5729.239872796461,
+        "p99": 47143.262766744294
       },
       "mean_score": NaN,
-      "n_errors": 50,
-      "n_rows": 0,
+      "n_errors": 1,
+      "n_rows": 49,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {
@@ -226,11 +226,11 @@
         "paraphrase": 1.0
       },
       "quality_equiv": NaN,
-      "tokens_in": 0,
-      "tokens_out": 0
+      "tokens_in": 2285,
+      "tokens_out": 4443
     }
   },
-  "note": "50-request pilot, low duplicate fraction only",
+  "note": "50-request pilot, low duplicate fraction",
   "run_name": "pilot_low_50",
   "tuning": {
     "control_f1": 0.9042145593869731,
