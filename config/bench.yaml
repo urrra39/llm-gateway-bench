@@ -8,43 +8,46 @@ gateway:
 
 generation:
   temperature: 0.0
-  # Large enough that reasoning + final content both fit: both models emit a
-  # chain of thought first, and a small budget is consumed entirely by
+  # Large enough that reasoning + final content both fit: the gateway model emits
+  # a chain of thought first, and a small budget is consumed entirely by
   # reasoning, leaving content empty.
   max_tokens: 4096
   reasoning_effort: low
   system_prompt: "Answer the request concisely, in at most three sentences. Do not refuse."
+  # Cheap tier is a constrained operating point of the same model: one sentence
+  # and 512 tokens. Measured 2026-09-17: brief answers use roughly half the
+  # output tokens of full answers on the same request.
+  cheap_max_tokens: 512
+  cheap_system_prompt: "Answer in one sentence. Be brief. Do not refuse."
 
-# Model pair chosen on 2026-09-08 after probing every model the gateway lists:
-# claude-opus-4-8, claude-opus-5, gpt-5.6-sol were budget-quota-blocked; only
-# deepseek-v4-flash and glm-5.3 answered. Both are reasoning models on this
-# gateway (chain of thought in `reasoning_content`); probing showed that with a
-# small max_tokens the reasoning can consume the whole budget and `content`
-# comes back empty, which read as model unreliability until the raw body was
-# inspected. With reasoning_effort=low and a 2048-token budget both answer
-# reliably; glm-5.3 then uses far fewer output tokens than deepseek-v4-flash.
-# deepseek-v4-flash is the expensive tier AND the reference; glm-5.3 is the
-# cheap tier. The primary judge is the reference model; the secondary judge is
-# the cheap model, for an independent family.
+# Model pair verified 2026-09-17 by probing every model the gateway lists:
+# claude-opus-4-8, claude-opus-5, gpt-5.6-sol, gpt-6-astra are budget-quota-blocked
+# and glm-5.3 (the 2026-09-08 cheap tier) has no available channel. Only
+# deepseek-v4-flash answers on both the OpenAI and Anthropic endpoints. Both
+# tiers therefore use deepseek-v4-flash: the expensive tier is the full recipe
+# (three sentences, 4096 tokens) and the cheap tier is the constrained recipe
+# (one sentence, 512 tokens). The price table charges the same per-token rate
+# for both tiers, so every reported dollar saving is a measured token saving,
+# not a price assumption between vendors. The primary and secondary judges are
+# the same model; kappa below therefore measures self-consistency, not
+# inter-family agreement, and is labelled as such.
 models:
-  cheap: glm-5.3
+  cheap: deepseek-v4-flash
   expensive: deepseek-v4-flash
   judge_primary: deepseek-v4-flash
-  judge_secondary: glm-5.3
+  judge_secondary: deepseek-v4-flash
 
 prices:
   currency: USD
-  as_of: "2026-09-08"
+  as_of: "2026-09-17"
   basis: >
-    Assumed tiering, not a provider quote. The dev gateway reports token usage
-    but no price and no spend. Prices per million tokens below are input
-    assumptions chosen to reflect a cheap-flash / expensive-frontier split; the
-    measured quantity is tokens, and every dollar figure is this table applied
-    to those tokens. Replace the table before quoting dollar savings elsewhere.
+    Assumed rate, not a provider quote. The dev gateway reports token usage
+    but no price and no spend. The rate below is an input assumption for one
+    model; the measured quantity is tokens, and every dollar figure is this
+    table applied to those tokens. Both tiers share the rate because both tiers
+    are the same model since 2026-09-17. Replace the table before quoting
+    dollar savings elsewhere.
   per_million_tokens:
-    glm-5.3:
-      input_per_mtok: 0.20
-      output_per_mtok: 1.00
     deepseek-v4-flash:
       input_per_mtok: 1.50
       output_per_mtok: 6.00

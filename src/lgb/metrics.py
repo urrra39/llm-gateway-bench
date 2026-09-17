@@ -107,9 +107,19 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
     false_hits: list[int] = []
     by_dup: dict[str, list[float]] = {}
     for r in rows:
-        s = 2 if bool(r.identical) else r.judge1_score
-        if s is None:
-            continue
+        if bool(r.identical):
+            s: float | None = 2.0
+        else:
+            raw = r.judge1_score
+            if raw is None:
+                continue
+            try:
+                f = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if np.isnan(f):
+                continue
+            s = f
         scores.append(float(s))
         dt = str(r.dup_type)
         by_dup.setdefault(dt, []).append(float(s))
@@ -174,16 +184,18 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
         )
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}
     # Strictly greater: an equal F1 means the tuning picked a point no better
-    # than a random 0.5 threshold, which is a published failure, not a pass.
+    # than a random threshold, which is a published failure, not a pass.
+    # The control is the mean F1 of 64 thresholds drawn uniformly from the
+    # tuning grid; see run.tune_threshold.
+    tuned_f1 = tuning.get("tuned_f1")
+    control_f1 = tuning.get("control_random_mean_f1", tuning.get("control_f1"))
     gates.append(
         {
             "name": "tuned_threshold_beats_random_control",
-            "passed": bool(tuning.get("tuned_f1"))
-            and bool(tuning.get("control_f1"))
-            and float(tuning["tuned_f1"]) > float(tuning["control_f1"]),
+            "passed": bool(tuned_f1) and control_f1 is not None and float(tuned_f1) > float(control_f1),
             "observed": (
-                f"tuned {tuning.get('threshold')} f1 {tuning.get('tuned_f1')} "
-                f"vs control {tuning.get('control_f1')}"
+                f"tuned {tuning.get('threshold')} f1 {tuned_f1} "
+                f"vs control_mean {control_f1} max {tuning.get('control_random_max_f1')}"
             ),
         }
     )

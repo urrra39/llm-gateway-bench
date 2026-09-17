@@ -263,15 +263,21 @@ def _outcome(config: str, frac: str, r: records.WorkloadRow, **fields: Any) -> r
 
 
 def _chat_nonempty(
-    gw: Gateway, model: str, request: str, cfg: Config
+    gw: Gateway, model: str, request: str, cfg: Config, tier: str = "expensive"
 ) -> tuple[str, int, int, float]:
-    res = gw.chat(model, request, system_prompt=cfg.generation.system_prompt)
+    if tier == "cheap":
+        system_prompt: str | None = cfg.generation.cheap_system_prompt
+        max_tokens = cfg.generation.cheap_max_tokens
+    else:
+        system_prompt = cfg.generation.system_prompt
+        max_tokens = cfg.generation.max_tokens
+    res = gw.chat(model, request, system_prompt=system_prompt, max_tokens=max_tokens)
     if not res.text.strip():
         res = gw.chat(
             model,
             request,
-            system_prompt=cfg.generation.system_prompt,
-            max_tokens=cfg.generation.max_tokens * 2,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens * 2,
         )
     return res.text, res.tokens_in, res.tokens_out, res.latency_s
 
@@ -515,7 +521,8 @@ def _run_one(
         dec = heuristic.decide(r.request)
         model = cheap if dec.route == "easy" else expensive
         served = "cheap" if dec.route == "easy" else "expensive"
-        text, ti, to, _ = _chat_nonempty(gw, model, r.request, cfg)
+        tier = "cheap" if dec.route == "easy" else "expensive"
+        text, ti, to, _ = _chat_nonempty(gw, model, r.request, cfg, tier=tier)
         return _outcome(
             config,
             frac,
@@ -534,7 +541,7 @@ def _run_one(
 
     if config == "router_cascade":
         assert cascade is not None
-        cheap_text, cti, cto, _ = _chat_nonempty(gw, cheap, r.request, cfg)
+        cheap_text, cti, cto, _ = _chat_nonempty(gw, cheap, r.request, cfg, tier="cheap")
         model_ms = ms(t0)
         dec = cascade.decide(r.request, cheap_text)
         cost = price_for(cfg, cheap).cost_usd(cti, cto)

@@ -31,6 +31,12 @@ class GenerationSpec(Frozen):
     #: still letting the model think briefly. Measured 2026-09-08.
     reasoning_effort: str | None = "low"
     system_prompt: str = "Answer the request concisely, in at most three sentences. Do not refuse."
+    #: Cheap tier is a constrained operating point of the same model: a brief
+    #: prompt and a smaller token budget, so cheap answers use fewer output
+    #: tokens at some quality cost. Introduced 2026-09-17 when the gateway
+    #: exposed only one working model; see config/bench.yaml.
+    cheap_max_tokens: int = 512
+    cheap_system_prompt: str = "Answer in one sentence. Be brief. Do not refuse."
 
 
 class ModelSpec(Frozen):
