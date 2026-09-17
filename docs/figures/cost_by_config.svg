@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="320">
+<text x='280' y='24' text-anchor='middle' font-size='14'>Assumed cost by config (USD)</text>
+<text x='14' y='160' font-size='11' transform='rotate(-90 14 160)'>USD</text>
+<rect x='50' y='50' width='40' height='230' fill='#4a7c9b'><title>low baseline: 0.9226</title></rect>
+<text x='90' y='298' text-anchor='middle' font-size='9'>baseline</text>
+<rect x='150' y='127' width='40' height='153' fill='#4a7c9b'><title>low cache: 0.6139</title></rect>
+<text x='190' y='298' text-anchor='middle' font-size='9'>cache</text>
+<rect x='250' y='147' width='40' height='133' fill='#4a7c9b'><title>low router_cascade: 0.5336</title></rect>
+<text x='290' y='298' text-anchor='middle' font-size='9'>r_cascade</text>
+<rect x='350' y='198' width='40' height='82' fill='#4a7c9b'><title>low router_heuristic: 0.3282</title></rect>
+<text x='390' y='298' text-anchor='middle' font-size='9'>r_heuristic</text>
+<rect x='90' y='51' width='40' height='229' fill='#c26a4a'><title>high baseline: 0.9187</title></rect>
+<rect x='190' y='185' width='40' height='95' fill='#c26a4a'><title>high cache: 0.3792</title></rect>
+<rect x='290' y='223' width='40' height='57' fill='#c26a4a'><title>high router_cascade: 0.2294</title></rect>
+<rect x='390' y='225' width='40' height='55' fill='#c26a4a'><title>high router_heuristic: 0.2212</title></rect>
+<text x='500' y='60' font-size='11' fill='#4a7c9b'>low</text>
+<text x='500' y='76' font-size='11' fill='#c26a4a'>high</text>
+</svg>
