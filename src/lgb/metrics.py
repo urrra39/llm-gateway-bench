@@ -108,7 +108,7 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
     by_dup: dict[str, list[float]] = {}
     for r in rows:
         if bool(r.identical):
-            s: float | None = 2.0
+            s: float = 2.0
         else:
             raw = r.judge1_score
             if raw is None:
@@ -120,9 +120,9 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
             if np.isnan(f):
                 continue
             s = f
-        scores.append(float(s))
+        scores.append(s)
         dt = str(r.dup_type)
-        by_dup.setdefault(dt, []).append(float(s))
+        by_dup.setdefault(dt, []).append(s)
         if dt in ("paraphrase", "trap") and s == 0 and r.answer_text != r.baseline_text:
             false_hits.append(int(r.idx))
     semantic_hits = metric["cache_semantic_hits"]
@@ -189,10 +189,11 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
     # tuning grid; see run.tune_threshold.
     tuned_f1 = tuning.get("tuned_f1")
     control_f1 = tuning.get("control_random_mean_f1", tuning.get("control_f1"))
+    tuned_ok = isinstance(tuned_f1, (int, float)) and isinstance(control_f1, (int, float))
     gates.append(
         {
             "name": "tuned_threshold_beats_random_control",
-            "passed": bool(tuned_f1) and control_f1 is not None and float(tuned_f1) > float(control_f1),
+            "passed": bool(tuned_ok and float(tuned_f1) > float(control_f1)),  # type: ignore[arg-type]
             "observed": (
                 f"tuned {tuning.get('threshold')} f1 {tuned_f1} "
                 f"vs control_mean {control_f1} max {tuning.get('control_random_max_f1')}"

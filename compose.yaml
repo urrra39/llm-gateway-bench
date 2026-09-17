@@ -1,0 +1,10 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/cache:/app/data/cache
+      - ./data/runs:/app/data/runs
+    environment:
+      - GSK_API_KEY=${GSK_API_KEY:-}

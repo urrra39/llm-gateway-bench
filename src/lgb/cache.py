@@ -222,10 +222,7 @@ def simulate_threshold(
     for i in range(len(vectors)):
         if not eligible[i]:
             continue
-        if i == 0:
-            best = 0.0
-        else:
-            best = float(np.max(vectors[:i] @ vectors[i]))
+        best = 0.0 if i == 0 else float(np.max(vectors[:i] @ vectors[i]))
         hit = best >= threshold
         if should_hit[i] and hit:
             tp += 1

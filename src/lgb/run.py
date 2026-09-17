@@ -135,7 +135,7 @@ def tune_threshold(cfg: Config, embedder: Embedder) -> dict[str, Any]:
         tune, _ = split_tune_report(rows, cfg.cache.tune_fraction, cfg.cache.tune_seed)
         vecs, should_hit, eligible = _replay_arrays(embedder, tune)
         per_frac[frac.name] = {
-            "n_rows": int(len(tune)),
+            "n_rows": len(tune),
             "n_should_hit": int(should_hit.sum()),
             "n_eligible": int(eligible.sum()),
         }
@@ -190,10 +190,10 @@ def tune_threshold(cfg: Config, embedder: Embedder) -> dict[str, Any]:
         "tuned_f1": float(best["f1"]),
         "control_random_mean_f1": control_mean,
         "control_random_max_f1": control_max,
-        "control_n_draws": int(len(draws)),
+        "control_n_draws": len(draws),
         "tuned_beats_control": bool(best["f1"] > control_mean),
         "per_fraction": per_frac,
-        "grid": {"start": 0.30, "stop": 0.999, "step": 0.005, "n": int(len(grid))},
+        "grid": {"start": 0.30, "stop": 0.999, "step": 0.005, "n": len(grid)},
         "sweep_file": "threshold_sweep.parquet",
     }
     # The sweep is a table, not a config value: keeping ~140 rows of it inside
