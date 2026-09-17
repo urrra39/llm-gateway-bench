@@ -43,10 +43,10 @@ def _bar_svg(title: str, series: dict[str, dict[str, float]], ylabel: str) -> st
     bar_w = 44
     gap = 28
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
-    out.append(f"<text x='{w//2}' y='24' text-anchor='middle' font-size='14'>{title}</text>")
+    out.append(f"<text x='{w // 2}' y='24' text-anchor='middle' font-size='14'>{title}</text>")
     out.append(
-        f"<text x='14' y='{h//2}' font-size='11' "
-        f"transform='rotate(-90 14 {h//2})'>{ylabel}</text>"
+        f"<text x='14' y='{h // 2}' font-size='11' "
+        f"transform='rotate(-90 14 {h // 2})'>{ylabel}</text>"
     )
     colors = {"low": "#4a7c9b", "high": "#c26a4a"}
     for fi, frac in enumerate(FRACS):
@@ -85,7 +85,7 @@ def _line_svg(
     ml, mr, mt, mb = 56, 16, 36, 44
     colors = {"recall": "#4a7c9b", "false_hit_rate": "#c0392b", "hit_rate": "#6a9b4a"}
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
-    out.append(f"<text x='{w//2}' y='22' text-anchor='middle' font-size='14'>{title}</text>")
+    out.append(f"<text x='{w // 2}' y='22' text-anchor='middle' font-size='14'>{title}</text>")
     out.append(
         f"<text x='14' y='{(mt + h - mb) / 2:.0f}' font-size='11' "
         f"transform='rotate(-90 14 {(mt + h - mb) / 2:.0f})'>{ylabel}</text>"
@@ -102,11 +102,12 @@ def _line_svg(
 
     for gy in (0.0, 0.25, 0.5, 0.75, 1.0):
         out.append(
-            f"<line x1='{ml}' y1='{py(gy):.1f}' x2='{w - mr}' y2='{py(gy):.1f}' "
-            "stroke='#ddd'/>"
+            f"<line x1='{ml}' y1='{py(gy):.1f}' x2='{w - mr}' y2='{py(gy):.1f}' stroke='#ddd'/>"
         )
-        out.append(f"<text x='{ml - 6}' y='{py(gy) + 4:.1f}' text-anchor='end' "
-                   f"font-size='9'>{gy:.2f}</text>")
+        out.append(
+            f"<text x='{ml - 6}' y='{py(gy) + 4:.1f}' text-anchor='end' "
+            f"font-size='9'>{gy:.2f}</text>"
+        )
     if mark_x is not None:
         out.append(
             f"<line x1='{px(mark_x):.1f}' y1='{mt}' x2='{px(mark_x):.1f}' "
@@ -153,7 +154,7 @@ def _hist_svg(title: str, frac: str, series: dict[str, list[float]]) -> str:
         counts[cfg] = bins
     cmax = max(max(b) for b in counts.values())
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
-    out.append(f"<text x='{w//2}' y='22' text-anchor='middle' font-size='14'>{title}</text>")
+    out.append(f"<text x='{w // 2}' y='22' text-anchor='middle' font-size='14'>{title}</text>")
 
     def px(b: int) -> float:
         return ml + b / nbins * (w - ml - mr)
@@ -174,12 +175,9 @@ def _hist_svg(title: str, frac: str, series: dict[str, list[float]]) -> str:
             )
     for ms, label in ((1, "1ms"), (100, "100ms"), (10000, "10s")):
         x = ml + (math.log10(ms) - lo_l) / (hi_l - lo_l) * (w - ml - mr)
+        out.append(f"<line x1='{x:.1f}' y1='{mt}' x2='{x:.1f}' y2='{h - mb}' stroke='#ddd'/>")
         out.append(
-            f"<line x1='{x:.1f}' y1='{mt}' x2='{x:.1f}' y2='{h - mb}' stroke='#ddd'/>"
-        )
-        out.append(
-            f"<text x='{x:.1f}' y='{h - mb + 14}' text-anchor='middle' "
-            f"font-size='9'>{label}</text>"
+            f"<text x='{x:.1f}' y='{h - mb + 14}' text-anchor='middle' font-size='9'>{label}</text>"
         )
     for li, cfg in enumerate(CONFIGS):
         out.append(
@@ -201,12 +199,9 @@ def main() -> int:
     FIGS.mkdir(parents=True, exist_ok=True)
     data = json.loads(RESULTS.read_text(encoding="utf-8"))
     metrics = data["metrics"]
-    cost = {
-        f: {c: float(metrics[f"{f}_{c}"]["cost_usd"]) for c in CONFIGS} for f in FRACS
-    }
+    cost = {f: {c: float(metrics[f"{f}_{c}"]["cost_usd"]) for c in CONFIGS} for f in FRACS}
     quality = {
-        f: {c: (metrics[f"{f}_{c}"].get("quality_equiv") or 0.0) for c in CONFIGS}
-        for f in FRACS
+        f: {c: (metrics[f"{f}_{c}"].get("quality_equiv") or 0.0) for c in CONFIGS} for f in FRACS
     }
     # Baseline has no quality; show 1.0 reference for scale honesty.
     for f in FRACS:

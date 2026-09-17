@@ -17,4 +17,6 @@ prediction about anyone's traffic.
 4. Prices are an assumed per-token rate with the date recorded, not a provider
    quote. The measured quantity is tokens.
 5. Latency is measured on a warm process; the first-request cost is reported
-   separately and excluded from percentiles.
+   separately and excluded from percentiles. The tail is dominated by upstream
+   model variance at measurement time, so p99 gaps between configurations
+   partly reflect when each run happened, not only what it ran.
