@@ -30,8 +30,8 @@ from lgb import records
 from lgb.cache import (
     CacheItem,
     SemanticCache,
-    choose_threshold,
-    evaluate_threshold,
+    normalize_exact,
+    simulate_threshold,
 )
 from lgb.chat import Gateway, price_for
 from lgb.config import Config
@@ -116,76 +116,121 @@ def load_workload(cfg: Config, frac: str) -> list[records.WorkloadRow]:
 # ---------------------------------------------------------------- tuning
 
 
-def _f1(stats: dict[str, float]) -> float:
-    denom = stats["precision"] + stats["recall"]
-    return 2 * stats["precision"] * stats["recall"] / denom if denom else 0.0
-
-
 def tune_threshold(cfg: Config, embedder: Embedder) -> dict[str, Any]:
-    """Choose the cache threshold on the tuning half of the workloads' labelled
-    paraphrase/trap pairs and assert it beats a random 0.5 threshold."""
-    positives: list[float] = []
-    negatives: list[float] = []
+    """Choose the cache threshold on the tuning half and compare it against a
+    random-threshold control.
+
+    The decision scored here is the one the cache actually makes: maximum
+    cosine similarity against everything stored so far, not the similarity of
+    one labelled pair. Tuning on isolated pairs picks a threshold that looks
+    excellent and then false-hits constantly once the cache is full, because
+    the maximum over a large store is much higher than a typical pair.
+    """
+    per_frac: dict[str, Any] = {}
+    vec_parts: list[np.ndarray] = []
+    hit_parts: list[np.ndarray] = []
+    elig_parts: list[np.ndarray] = []
     for frac in cfg.workload.duplicate_fractions:
         rows = load_workload(cfg, frac.name)
         tune, _ = split_tune_report(rows, cfg.cache.tune_fraction, cfg.cache.tune_seed)
-        pos, neg = _labelled_similarities(embedder, tune)
-        positives.extend(pos)
-        negatives.extend(neg)
-    pos_arr = np.asarray(positives, dtype=float)
-    neg_arr = np.asarray(negatives, dtype=float)
-    threshold, stats = choose_threshold(pos_arr, neg_arr)
-    control = evaluate_threshold(pos_arr, neg_arr, 0.5)
+        vecs, should_hit, eligible = _replay_arrays(embedder, tune)
+        per_frac[frac.name] = {
+            "n_rows": int(len(tune)),
+            "n_should_hit": int(should_hit.sum()),
+            "n_eligible": int(eligible.sum()),
+        }
+        vec_parts.append(vecs)
+        hit_parts.append(should_hit)
+        elig_parts.append(eligible)
+
+    grid = np.round(np.arange(0.30, 0.999, 0.005), 4)
+    # Score every fraction's replay and sum the confusion counts, so the chosen
+    # threshold is not tuned to one duplicate fraction.
+    def scored(thr: float) -> dict[str, float]:
+        tp = fp = fn = tn = 0.0
+        for vecs, hits, elig in zip(vec_parts, hit_parts, elig_parts, strict=True):
+            s = simulate_threshold(vecs, hits, elig, thr)
+            tp += s["tp"]
+            fp += s["fp"]
+            fn += s["fn"]
+            tn += s["tn"]
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        denom = precision + recall
+        return {
+            "threshold": thr,
+            "precision": precision,
+            "recall": recall,
+            "f1": 2 * precision * recall / denom if denom else 0.0,
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+            "tn": tn,
+            "false_hit_rate": fp / (tp + fp) if tp + fp else 0.0,
+        }
+
+    sweep = [scored(float(t)) for t in grid]
+    best = max(sweep, key=lambda s: (s["f1"], s["threshold"]))
+
+    # Random-threshold control: thresholds drawn uniformly from the same grid.
+    # The tuned point must beat their mean, or the tuning did nothing.
+    rng = np.random.default_rng(cfg.cache.tune_seed)
+    draws = rng.uniform(float(grid.min()), float(grid.max()), size=64)
+    control_f1s = [scored(float(t))["f1"] for t in draws]
+    control_mean = float(np.mean(control_f1s))
+    control_max = float(np.max(control_f1s))
+
     record: dict[str, Any] = {
-        "threshold": threshold,
-        "tune_stats": stats,
-        "control_stats": control,
-        "tuned_f1": _f1(stats),
-        "control_f1": _f1(control),
-        "tuned_beats_control": _f1(stats) >= _f1(control),
-        "n_positives": len(pos_arr),
-        "n_negatives": len(neg_arr),
+        "method": (
+            "replay simulation: max cosine over the growing cache, scored against "
+            "the workload's PAWS-derived should-hit labels on the tuning half"
+        ),
+        "threshold": float(best["threshold"]),
+        "tune_stats": {k: float(v) for k, v in best.items()},
+        "tuned_f1": float(best["f1"]),
+        "control_random_mean_f1": control_mean,
+        "control_random_max_f1": control_max,
+        "control_n_draws": int(len(draws)),
+        "tuned_beats_control": bool(best["f1"] > control_mean),
+        "per_fraction": per_frac,
+        "grid": {"start": 0.30, "stop": 0.999, "step": 0.005, "n": int(len(grid))},
+        "sweep_file": "threshold_sweep.parquet",
     }
+    # The sweep is a table, not a config value: keeping ~140 rows of it inside
+    # tuning.json made the record unreadable and invited drift between the
+    # chosen operating point and the curve it came from.
+    write_parquet(pd.DataFrame(sweep), cfg.data.runs_dir / "threshold_sweep.parquet")
     write_json(record, cfg.data.runs_dir / "tuning.json")
     return record
 
 
-def _labelled_similarities(
+def _replay_arrays(
     embedder: Embedder, rows: list[records.WorkloadRow]
-) -> tuple[list[float], list[float]]:
-    anchors_by_group: dict[str, str] = {}
-    follows_by_group: dict[str, list[records.WorkloadRow]] = {}
-    for r in rows:
-        if r.dup_type == "novel":
-            anchors_by_group[r.group_id] = r.request
-        else:
-            follows_by_group.setdefault(r.group_id, []).append(r)
-    pos: list[float] = []
-    neg: list[float] = []
-    cache: dict[str, np.ndarray] = {}
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Embeddings in workload order plus the should-hit and eligibility masks.
 
-    def vec(text: str) -> np.ndarray:
-        if text not in cache:
-            cache[text] = embedder.encode([text])[0]
-        return cache[text]
+    should_hit is True for a paraphrase or an exact repeat, because an earlier
+    equivalent request exists and the cache ought to serve it. It is False for
+    a novel request and for a trap (PAWS label 0: lexically close, different
+    meaning), both of which must miss.
 
-    pool = list(anchors_by_group.values())
-    for group, anchor in anchors_by_group.items():
-        va = vec(anchor)
-        for f in follows_by_group.get(group, []):
-            sim = float(va @ vec(f.request))
-            if f.dup_type == "paraphrase":
-                pos.append(sim)
-            elif f.dup_type == "trap":
-                neg.append(sim)
-    if len(pool) > 1:
-        rng = np.random.default_rng(20260908)
-        for _ in range(max(len(pos), 40)):
-            a = pool[rng.integers(0, len(pool))]
-            b = pool[rng.integers(0, len(pool))]
-            if a != b:
-                neg.append(float(vec(a) @ vec(b)))
-    return pos, neg
+    eligible is False for exact repeats: the exact-match short-circuit serves
+    them before any embedding, so they never exercise the similarity threshold
+    and would otherwise inflate its apparent recall.
+    """
+    texts = [r.request for r in rows]
+    vecs = embedder.encode(texts, batch_size=64)
+    seen: set[str] = set()
+    should_hit = np.zeros(len(rows), dtype=bool)
+    eligible = np.ones(len(rows), dtype=bool)
+    for i, r in enumerate(rows):
+        key = normalize_exact(r.request)
+        if key in seen:
+            eligible[i] = False  # exact short-circuit, never reaches the threshold
+        elif r.dup_type == "paraphrase":
+            should_hit[i] = True
+        seen.add(key)
+    return vecs, should_hit, eligible
 
 
 # ---------------------------------------------------------------- execution

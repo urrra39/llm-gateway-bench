@@ -195,3 +195,71 @@ def choose_threshold(
             best_thr = float(thr)
             best_stats = stats
     return best_thr, best_stats
+
+
+def simulate_threshold(
+    vectors: np.ndarray,
+    should_hit: np.ndarray,
+    eligible: np.ndarray,
+    threshold: float,
+) -> dict[str, float]:
+    """Replay a workload against a growing cache and score the hit decisions.
+
+    The live cache does not compare a request against one stored request; it
+    takes the maximum cosine similarity over everything stored so far. That
+    maximum rises as the cache fills, so a threshold chosen on isolated pairs
+    understates the false-hit rate badly: with hundreds of stored requests an
+    unrelated request finds some spurious near-neighbour. Tuning therefore has
+    to score the same statistic the cache uses.
+
+    vectors:    (n, d) row embeddings in workload order, L2-normalised.
+    should_hit: (n,) bool ground truth; True only where an earlier equivalent
+                request exists (paraphrase / exact repeat).
+    eligible:   (n,) bool, False for rows the exact-match short-circuit serves
+                before any embedding, which the semantic threshold never sees.
+    """
+    tp = fp = fn = tn = 0
+    for i in range(len(vectors)):
+        if not eligible[i]:
+            continue
+        if i == 0:
+            best = 0.0
+        else:
+            best = float(np.max(vectors[:i] @ vectors[i]))
+        hit = best >= threshold
+        if should_hit[i] and hit:
+            tp += 1
+        elif should_hit[i] and not hit:
+            fn += 1
+        elif not should_hit[i] and hit:
+            fp += 1
+        else:
+            tn += 1
+    precision = tp / (tp + fp) if tp + fp else 0.0
+    recall = tp / (tp + fn) if tp + fn else 0.0
+    denom = precision + recall
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": 2 * precision * recall / denom if denom else 0.0,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
+        "false_hit_rate": fp / (tp + fp) if tp + fp else 0.0,
+    }
+
+
+def sweep_thresholds(
+    vectors: np.ndarray,
+    should_hit: np.ndarray,
+    eligible: np.ndarray,
+    candidates: np.ndarray,
+) -> list[dict[str, float]]:
+    """simulate_threshold over a grid, for the recall / false-hit curve."""
+    out: list[dict[str, float]] = []
+    for thr in candidates:
+        stats = simulate_threshold(vectors, should_hit, eligible, float(thr))
+        stats["threshold"] = float(thr)
+        out.append(stats)
+    return out
