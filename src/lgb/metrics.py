@@ -4,7 +4,8 @@ Validity gates are code, not prose:
 - baseline must cost more than the cached and routed runs, or the measurement
   is broken;
 - the false-hit rate is reported and never folded into the hit rate;
-- the tuned threshold must beat a random (0.5) threshold on the tuning half.
+- the tuned threshold must beat the mean of 64 random thresholds drawn from
+  the tuning grid, or the tuning did nothing.
 """
 
 from __future__ import annotations

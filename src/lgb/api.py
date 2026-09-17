@@ -1,8 +1,8 @@
 """The FastAPI gateway exposing an OpenAI-compatible /v1/chat/completions.
 
 Live mode reuses the same components the benchmark measures: semantic cache
-and cascade routing, with per-request instrumentation returned in the response
-headers and logged to data/live/.
+and cascade routing, with the same short/long recipes per tier. Per-request
+instrumentation is returned in the response body's x_gateway object.
 """
 
 from __future__ import annotations
@@ -58,7 +58,10 @@ def build_app(cfg: Config) -> FastAPI:
             else:
                 if mode == "router":
                     cheap_res = gw.chat(
-                        cfg.models.cheap, user_text, system_prompt=cfg.generation.system_prompt
+                        cfg.models.cheap,
+                        user_text,
+                        system_prompt=cfg.generation.cheap_system_prompt,
+                        max_tokens=cfg.generation.cheap_max_tokens,
                     )
                     cheap_text = cheap_res.text
                     dec = cascade.decide(user_text, cheap_text)
@@ -74,7 +77,10 @@ def build_app(cfg: Config) -> FastAPI:
                         served = cfg.models.cheap
                 elif mode == "cheap":
                     res = gw.chat(
-                        cfg.models.cheap, user_text, system_prompt=cfg.generation.system_prompt
+                        cfg.models.cheap,
+                        user_text,
+                        system_prompt=cfg.generation.cheap_system_prompt,
+                        max_tokens=cfg.generation.cheap_max_tokens,
                     )
                     served = cfg.models.cheap
                 else:  # cache

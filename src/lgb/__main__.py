@@ -67,7 +67,9 @@ def main(argv: list[str] | None = None) -> int:
     ha = sub.add_parser("human-agreement", help="judge-vs-human agreement from a filled CSV")
     ha.add_argument("--csv", type=Path, required=True)
 
-    sub.add_parser("serve", help="run the FastAPI gateway")
+    serve = sub.add_parser("serve", help="run the FastAPI gateway")
+    serve.add_argument("--host", default="0.0.0.0", help="bind address (default all interfaces)")
+    serve.add_argument("--port", type=int, default=8000)
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     if not args.command:
@@ -158,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         from lgb.api import build_app
 
         cfg = _cfg(args)
-        uvicorn.run(build_app(cfg), host="127.0.0.1", port=8000)
+        uvicorn.run(build_app(cfg), host=args.host, port=args.port)
         return 0
     return 2  # pragma: no cover
 

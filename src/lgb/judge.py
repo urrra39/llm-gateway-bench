@@ -1,11 +1,12 @@
 """Quality judging.
 
-Every gateway response is compared against the baseline (expensive-model)
+Every gateway response is compared against the baseline (long-recipe)
 response for the same request. A response byte-identical to the baseline is
 equivalent by construction (score 2, no judge call). Everything else is scored
 by the primary judge model on a frozen rubric at temperature 0; a seeded subset
-gets a second judge for inter-judge agreement (Cohen's kappa with its
-denominator). Verdicts persist per row. Human labels are never filled by code.
+gets a second pass by the same judge model for self-consistency (Cohen's kappa
+with its denominator, labelled judge self-consistency wherever reported).
+Verdicts persist per row. Human labels are never filled by code.
 """
 
 from __future__ import annotations
@@ -152,7 +153,11 @@ def judge_run(
 
 
 def kappa_report(cfg: Config) -> dict[str, Any]:
-    """Judge1 vs judge2 agreement over rows both scored, from committed files."""
+    """Judge1 vs judge2 agreement over rows both scored, from committed files.
+
+    Both passes currently come from the same model, so report the result as
+    judge self-consistency, not inter-judge agreement.
+    """
     pairs: list[tuple[int, int]] = []
     for run in cfg.data.runs_dir.glob("*"):
         frame = read_parquet(run / "judge.parquet")

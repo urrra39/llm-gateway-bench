@@ -1,7 +1,14 @@
-"""Pydantic config loaded from a single YAML. Every tunable lives here."""
+"""Pydantic config loaded from a single YAML. Every tunable lives here.
+
+The YAML file is the authority. One environment variable is honored,
+LGB_GATEWAY_BASE_URL, which overrides gateway.base_url so the same file works
+inside a container (where the upstream gateway is not on container localhost).
+Nothing else reads the environment.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -164,5 +171,9 @@ class Config(Frozen):
         raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError(f"{path} did not load as a YAML mapping")
-        cfg = Config.model_validate(raw)
-        return cfg
+        override = os.environ.get("LGB_GATEWAY_BASE_URL")
+        if override:
+            gateway = dict(raw.get("gateway", {}))
+            gateway["base_url"] = override
+            raw["gateway"] = gateway
+        return Config.model_validate(raw)
