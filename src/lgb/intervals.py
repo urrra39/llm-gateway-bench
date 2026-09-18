@@ -59,6 +59,26 @@ def bootstrap_ci(
     return (lo, hi, hashlib.sha256(idx.tobytes()).hexdigest()[:16])
 
 
+def bootstrap_percentiles(
+    values: Sequence[float],
+    seed: int,
+    levels: Sequence[float] = (50.0, 95.0, 99.0),
+    n_resamples: int = BOOTSTRAP_B,
+) -> tuple[dict[float, tuple[float, float]], str]:
+    """One shared index matrix, one CI per percentile level."""
+    arr = np.asarray(list(values), dtype=float)
+    n = len(arr)
+    if n == 0:
+        return ({lv: (float("nan"), float("nan")) for lv in levels}, "")
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n, size=(n_resamples, n))
+    out: dict[float, tuple[float, float]] = {}
+    for lv in levels:
+        stats = np.percentile(arr[idx], lv, axis=1)
+        out[lv] = (float(np.percentile(stats, 2.5)), float(np.percentile(stats, 97.5)))
+    return (out, hashlib.sha256(idx.tobytes()).hexdigest()[:16])
+
+
 def newcombe_diff(
     k1: int, n1: int, k2: int, n2: int, z: float = Z_95
 ) -> tuple[float, float, float]:

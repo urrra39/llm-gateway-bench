@@ -1,51 +1,5 @@
 {
-  "all_gates_passed": false,
-  "cost_weighted_thresholds": {
-    "loss": "L = r*fp + fn over the committed sweep grid",
-    "ratios": [
-      {
-        "false_hit_rate": 0.1806,
-        "fn": 0,
-        "fp": 26,
-        "loss_ratio": 1,
-        "recall": 1.0,
-        "threshold": 0.745
-      },
-      {
-        "false_hit_rate": 0.1226,
-        "fn": 25,
-        "fp": 13,
-        "loss_ratio": 3,
-        "recall": 0.7881,
-        "threshold": 0.98
-      },
-      {
-        "false_hit_rate": 0.0645,
-        "fn": 89,
-        "fp": 2,
-        "loss_ratio": 10,
-        "recall": 0.2458,
-        "threshold": 0.995
-      },
-      {
-        "false_hit_rate": 0.0645,
-        "fn": 89,
-        "fp": 2,
-        "loss_ratio": 30,
-        "recall": 0.2458,
-        "threshold": 0.995
-      },
-      {
-        "false_hit_rate": 0.0645,
-        "fn": 89,
-        "fp": 2,
-        "loss_ratio": 100,
-        "recall": 0.2458,
-        "threshold": 0.995
-      }
-    ],
-    "tie_rule": "lowest threshold wins ties (pandas idxmin)"
-  },
+  "all_gates_passed": true,
   "environment": {
     "cache_threshold": 0.86,
     "concurrency": 4,
@@ -112,24 +66,8 @@
       "name": "tuned_threshold_beats_random_control",
       "observed": "tuned 0.79 f1 0.9007633587786259 vs control_mean 0.8279916296353538 max 0.9007633587786259",
       "passed": true
-    },
-    {
-      "name": "human_label_coverage",
-      "observed": "0/60 = 0.000",
-      "passed": false
-    },
-    {
-      "name": "judge_independence",
-      "observed": "primary deepseek-v4-flash == secondary deepseek-v4-flash; kappa 0.8034 (n=338) is self-consistency",
-      "passed": false
     }
   ],
-  "interval_methods": {
-    "bootstrap": "percentile bootstrap, B=10000, numpy default_rng streams from recorded per-interval seeds (master 20260917); the sha of each resample index matrix is stored beside its interval",
-    "newcombe": "Newcombe score interval (method 10) for differences",
-    "paired_bootstrap": "lockstep resampling over shared row idx",
-    "wilson": "Wilson score interval, z=1.96, for binomial rates"
-  },
   "kappa": {
     "expected": 0.6991,
     "kappa": 0.8034,
@@ -143,23 +81,12 @@
       "cache_semantic_hits": 0,
       "cheap_calls": 0,
       "config": "baseline",
-      "cost_ci": [
-        0.7973,
-        1.0505
-      ],
-      "cost_idx_sha": "ac4f666173ef2bae",
-      "cost_seed": 732496050,
       "cost_usd": 0.9187124999999999,
       "expensive_calls": 246,
       "false_hit_rate": null,
-      "false_hit_rate_ci": null,
       "first_latency_ms": 2963.5101670010044,
       "frac": "high",
       "hit_rate": 0.0,
-      "hit_rate_ci": [
-        0.0,
-        0.0154
-      ],
       "judged_rows": 0,
       "latency": {
         "mean": 4911.063744224454,
@@ -167,31 +94,12 @@
         "p95": 12331.45870039916,
         "p99": 25999.170333480215
       },
-      "latency_ci": {
-        "p50": [
-          3040.1,
-          3429.7
-        ],
-        "p95": [
-          10300.0,
-          14125.6
-        ],
-        "p99": [
-          14125.6,
-          41179.4
-        ]
-      },
-      "latency_idx_sha": "b05ac56f90e89056",
-      "latency_seed": 3798023334,
       "n_errors": 3,
       "n_rows": 246,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {},
-      "quality_ci": null,
       "quality_equiv": null,
-      "quality_idx_sha": null,
-      "quality_seed": null,
       "tokens_in": 19291,
       "tokens_out": 148296
     },
@@ -201,19 +109,9 @@
       "cache_semantic_hits": 85,
       "cheap_calls": 0,
       "config": "cache",
-      "cost_ci": [
-        0.2554,
-        0.5326
-      ],
-      "cost_idx_sha": "051e4025d1899b8b",
-      "cost_seed": 70105351,
       "cost_usd": 0.379233,
       "expensive_calls": 88,
       "false_hit_rate": 0.0941,
-      "false_hit_rate_ci": [
-        0.0485,
-        0.1749
-      ],
       "false_hit_rows": [
         296,
         269,
@@ -227,10 +125,6 @@
       "first_latency_ms": 2950.5281250003463,
       "frac": "high",
       "hit_rate": 0.6423,
-      "hit_rate_ci": [
-        0.5806,
-        0.6996
-      ],
       "judged_rows": 235,
       "latency": {
         "mean": 2009.203098126469,
@@ -238,22 +132,6 @@
         "p95": 7825.48375900004,
         "p99": 31169.63134848037
       },
-      "latency_ci": {
-        "p50": [
-          6.3,
-          8.3
-        ],
-        "p95": [
-          4960.6,
-          13023.0
-        ],
-        "p99": [
-          11968.7,
-          49186.1
-        ]
-      },
-      "latency_idx_sha": "8f690d5f4f7ea6c5",
-      "latency_seed": 1967652109,
       "mean_score": 1.817,
       "n_errors": 3,
       "n_rows": 246,
@@ -265,83 +143,9 @@
         "paraphrase": 0.8939,
         "trap": 0.4
       },
-      "quality_ci": [
-        0.8766,
-        0.9362
-      ],
       "quality_equiv": 0.9085,
-      "quality_idx_sha": "2528f830e30f0936",
-      "quality_seed": 2005578569,
       "tokens_in": 6870,
       "tokens_out": 61488
-    },
-    "high_exact_only": {
-      "cache_exact_hits": 73,
-      "cache_misses": 173,
-      "cache_semantic_hits": 0,
-      "cheap_calls": 0,
-      "config": "exact_only",
-      "cost_ci": [
-        0.5137,
-        0.7465
-      ],
-      "cost_idx_sha": "7f519bfaed23e9ae",
-      "cost_seed": 959501047,
-      "cost_usd": 0.6245,
-      "exact_proxy": {
-        "judged": 71,
-        "score_0": 0,
-        "score_1": 3,
-        "score_2": 68,
-        "unjudged": 2
-      },
-      "expensive_calls": 173,
-      "false_hit_rate": null,
-      "false_hit_rate_ci": null,
-      "false_hit_rows": [],
-      "first_latency_ms": 5877.235542000562,
-      "frac": "high",
-      "hit_rate": 0.2967,
-      "hit_rate_ci": [
-        0.2431,
-        0.3566
-      ],
-      "judged_rows": 0,
-      "latency": {
-        "mean": 3436.2312519797156,
-        "p50": 2628.031292000742,
-        "p95": 10388.162100200132,
-        "p99": 25386.526125039894
-      },
-      "latency_ci": {
-        "p50": [
-          2422.5,
-          2871.3
-        ],
-        "p95": [
-          8428.7,
-          12483.4
-        ],
-        "p99": [
-          12483.4,
-          41179.4
-        ]
-      },
-      "latency_idx_sha": "e404a6a9d5713757",
-      "latency_seed": 1708418205,
-      "mean_score": null,
-      "n_errors": 3,
-      "n_rows": 246,
-      "per_request_latency_note": "warm percentiles exclude the first request",
-      "present": true,
-      "quality_by_dup": {},
-      "quality_ci": null,
-      "quality_equiv": null,
-      "quality_note": "unmeasured: judging the replay's stored texts would need new judge calls; the proxy below judged different stored texts",
-      "replay": true,
-      "replay_note": "hits and misses replayed from baseline rows in idx order; miss cost/latency inherited from the baseline row, hit latency is the measured median cache_exact latency (0.25 ms): replayed, not measured; fresh upstream latency variance not captured",
-      "tokens_in": 13500,
-      "tokens_out": 100701
     },
     "high_router_cascade": {
       "cache_exact_hits": 73,
@@ -349,19 +153,9 @@
       "cache_semantic_hits": 86,
       "cheap_calls": 82,
       "config": "router_cascade",
-      "cost_ci": [
-        0.1372,
-        0.3437
-      ],
-      "cost_idx_sha": "ffe5195fe7c28df7",
-      "cost_seed": 1540928459,
       "cost_usd": 0.22939350000000006,
       "expensive_calls": 5,
       "false_hit_rate": 0.0698,
-      "false_hit_rate_ci": [
-        0.0324,
-        0.144
-      ],
       "false_hit_rows": [
         296,
         467,
@@ -373,10 +167,6 @@
       "first_latency_ms": 2643.1775000000926,
       "frac": "high",
       "hit_rate": 0.6463,
-      "hit_rate_ci": [
-        0.5848,
-        0.7034
-      ],
       "judged_rows": 239,
       "latency": {
         "mean": 1425.6866685510226,
@@ -384,22 +174,6 @@
         "p95": 5751.324816399561,
         "p99": 24450.21707700049
       },
-      "latency_ci": {
-        "p50": [
-          6.6,
-          8.2
-        ],
-        "p95": [
-          3306.3,
-          8629.6
-        ],
-        "p99": [
-          8618.0,
-          29737.2
-        ]
-      },
-      "latency_idx_sha": "46f9f6de07985145",
-      "latency_seed": 1305358876,
       "mean_score": 1.7238,
       "n_errors": 3,
       "n_rows": 246,
@@ -411,13 +185,7 @@
         "paraphrase": 0.8507,
         "trap": 0.4375
       },
-      "quality_ci": [
-        0.8285,
-        0.8933
-      ],
       "quality_equiv": 0.8619,
-      "quality_idx_sha": "56bd5f81ae788613",
-      "quality_seed": 3166951345,
       "tokens_in": 6741,
       "tokens_out": 36547
     },
@@ -427,19 +195,9 @@
       "cache_semantic_hits": 80,
       "cheap_calls": 91,
       "config": "router_heuristic",
-      "cost_ci": [
-        0.1618,
-        0.2947
-      ],
-      "cost_idx_sha": "59b45acceff427f1",
-      "cost_seed": 1611333067,
       "cost_usd": 0.221193,
       "expensive_calls": 6,
       "false_hit_rate": 0.125,
-      "false_hit_rate_ci": [
-        0.0693,
-        0.215
-      ],
       "false_hit_rows": [
         269,
         467,
@@ -455,10 +213,6 @@
       "first_latency_ms": 2189.3958340006066,
       "frac": "high",
       "hit_rate": 0.6057,
-      "hit_rate_ci": [
-        0.5434,
-        0.6647
-      ],
       "judged_rows": 242,
       "latency": {
         "mean": 1514.1057227755648,
@@ -466,22 +220,6 @@
         "p95": 9084.051958398775,
         "p99": 10517.931120039502
       },
-      "latency_ci": {
-        "p50": [
-          8.6,
-          10.9
-        ],
-        "p95": [
-          6594.7,
-          9581.8
-        ],
-        "p99": [
-          9310.4,
-          16744.0
-        ]
-      },
-      "latency_idx_sha": "cd474bb1d902eeb5",
-      "latency_seed": 4225867777,
       "mean_score": 1.6529,
       "n_errors": 3,
       "n_rows": 246,
@@ -493,13 +231,7 @@
         "paraphrase": 0.8143,
         "trap": 0.4643
       },
-      "quality_ci": [
-        0.7872,
-        0.8636
-      ],
       "quality_equiv": 0.8264,
-      "quality_idx_sha": "5ef813d3135395e3",
-      "quality_seed": 2521982787,
       "tokens_in": 7090,
       "tokens_out": 35093
     },
@@ -509,23 +241,12 @@
       "cache_semantic_hits": 0,
       "cheap_calls": 0,
       "config": "baseline",
-      "cost_ci": [
-        0.8125,
-        1.0404
-      ],
-      "cost_idx_sha": "557b3de95315dfdf",
-      "cost_seed": 1872326506,
       "cost_usd": 0.9225674999999995,
       "expensive_calls": 237,
       "false_hit_rate": null,
-      "false_hit_rate_ci": null,
       "first_latency_ms": 2810.802457999671,
       "frac": "low",
       "hit_rate": 0.0,
-      "hit_rate_ci": [
-        0.0,
-        0.016
-      ],
       "judged_rows": 0,
       "latency": {
         "mean": 4609.97549861011,
@@ -533,31 +254,12 @@
         "p95": 11657.030479248988,
         "p99": 25987.848643650945
       },
-      "latency_ci": {
-        "p50": [
-          2788.2,
-          3281.5
-        ],
-        "p95": [
-          10108.3,
-          16990.5
-        ],
-        "p99": [
-          15659.3,
-          30842.6
-        ]
-      },
-      "latency_idx_sha": "acb3ed48153c50f7",
-      "latency_seed": 634598869,
       "n_errors": 8,
       "n_rows": 237,
       "per_request_latency_note": "warm percentiles exclude the first request",
       "present": true,
       "quality_by_dup": {},
-      "quality_ci": null,
       "quality_equiv": null,
-      "quality_idx_sha": null,
-      "quality_seed": null,
       "tokens_in": 18753,
       "tokens_out": 149073
     },
@@ -567,19 +269,9 @@
       "cache_semantic_hits": 45,
       "cheap_calls": 0,
       "config": "cache",
-      "cost_ci": [
-        0.5126,
-        0.7216
-      ],
-      "cost_idx_sha": "017e38959df88ede",
-      "cost_seed": 3798808762,
       "cost_usd": 0.6138629999999999,
       "expensive_calls": 169,
       "false_hit_rate": 0.0889,
-      "false_hit_rate_ci": [
-        0.0351,
-        0.2073
-      ],
       "false_hit_rows": [
         130,
         168,
@@ -589,10 +281,6 @@
       "first_latency_ms": 2973.9134999999806,
       "frac": "low",
       "hit_rate": 0.2899,
-      "hit_rate_ci": [
-        0.236,
-        0.3505
-      ],
       "judged_rows": 224,
       "latency": {
         "mean": 3325.5645708354314,
@@ -600,22 +288,6 @@
         "p95": 10620.162200200499,
         "p99": 18942.673188639048
       },
-      "latency_ci": {
-        "p50": [
-          2310.9,
-          2631.5
-        ],
-        "p95": [
-          8478.9,
-          13647.5
-        ],
-        "p99": [
-          13005.2,
-          33566.0
-        ]
-      },
-      "latency_idx_sha": "533cc775c7739c1a",
-      "latency_seed": 636691886,
       "mean_score": 1.8616,
       "n_errors": 7,
       "n_rows": 238,
@@ -627,83 +299,9 @@
         "paraphrase": 0.8148,
         "trap": 0.3125
       },
-      "quality_ci": [
-        0.904,
-        0.9554
-      ],
       "quality_equiv": 0.9308,
-      "quality_idx_sha": "4bf63cb8f273d78c",
-      "quality_seed": 2244370175,
       "tokens_in": 13286,
       "tokens_out": 98989
-    },
-    "low_exact_only": {
-      "cache_exact_hits": 26,
-      "cache_misses": 211,
-      "cache_semantic_hits": 0,
-      "cheap_calls": 0,
-      "config": "exact_only",
-      "cost_ci": [
-        0.6916,
-        0.9251
-      ],
-      "cost_idx_sha": "3b0ab277398e416f",
-      "cost_seed": 2966119837,
-      "cost_usd": 0.8049,
-      "exact_proxy": {
-        "judged": 24,
-        "score_0": 1,
-        "score_1": 2,
-        "score_2": 21,
-        "unjudged": 0
-      },
-      "expensive_calls": 211,
-      "false_hit_rate": null,
-      "false_hit_rate_ci": null,
-      "false_hit_rows": [],
-      "first_latency_ms": 2810.802457999671,
-      "frac": "low",
-      "hit_rate": 0.1097,
-      "hit_rate_ci": [
-        0.076,
-        0.1559
-      ],
-      "judged_rows": 0,
-      "latency": {
-        "mean": 4004.811753427846,
-        "p50": 2765.1766250000946,
-        "p95": 11407.365968749673,
-        "p99": 18934.093200450305
-      },
-      "latency_ci": {
-        "p50": [
-          2523.8,
-          3046.1
-        ],
-        "p95": [
-          9768.3,
-          14544.1
-        ],
-        "p99": [
-          13728.6,
-          29850.4
-        ]
-      },
-      "latency_idx_sha": "0e4ba529bbc1f9ea",
-      "latency_seed": 164756683,
-      "mean_score": null,
-      "n_errors": 8,
-      "n_rows": 237,
-      "per_request_latency_note": "warm percentiles exclude the first request",
-      "present": true,
-      "quality_by_dup": {},
-      "quality_ci": null,
-      "quality_equiv": null,
-      "quality_note": "unmeasured: judging the replay's stored texts would need new judge calls; the proxy below judged different stored texts",
-      "replay": true,
-      "replay_note": "hits and misses replayed from baseline rows in idx order; miss cost/latency inherited from the baseline row, hit latency is the measured median cache_exact latency (0.53 ms): replayed, not measured; fresh upstream latency variance not captured",
-      "tokens_in": 16643,
-      "tokens_out": 129990
     },
     "low_router_cascade": {
       "cache_exact_hits": 23,
@@ -711,19 +309,9 @@
       "cache_semantic_hits": 44,
       "cheap_calls": 159,
       "config": "router_cascade",
-      "cost_ci": [
-        0.3774,
-        0.7204
-      ],
-      "cost_idx_sha": "c51c48de1ab21b36",
-      "cost_seed": 3218223914,
       "cost_usd": 0.533598,
       "expensive_calls": 12,
       "false_hit_rate": 0.1364,
-      "false_hit_rate_ci": [
-        0.064,
-        0.2671
-      ],
       "false_hit_rows": [
         130,
         168,
@@ -735,10 +323,6 @@
       "first_latency_ms": 2195.9735000000364,
       "frac": "low",
       "hit_rate": 0.2815,
-      "hit_rate_ci": [
-        0.2282,
-        0.3418
-      ],
       "judged_rows": 227,
       "latency": {
         "mean": 3597.7405260084333,
@@ -746,22 +330,6 @@
         "p95": 17513.64330779978,
         "p99": 37085.67285664029
       },
-      "latency_ci": {
-        "p50": [
-          1657.2,
-          1885.0
-        ],
-        "p95": [
-          8226.6,
-          21257.7
-        ],
-        "p99": [
-          20163.1,
-          68368.3
-        ]
-      },
-      "latency_idx_sha": "bfe8395c26fedbc1",
-      "latency_seed": 140886244,
       "mean_score": 1.7357,
       "n_errors": 7,
       "n_rows": 238,
@@ -773,13 +341,7 @@
         "paraphrase": 0.75,
         "trap": 0.3333
       },
-      "quality_ci": [
-        0.8326,
-        0.9009
-      ],
       "quality_equiv": 0.8678,
-      "quality_idx_sha": "27cade37b92194c7",
-      "quality_seed": 522499443,
       "tokens_in": 13496,
       "tokens_out": 85559
     },
@@ -789,19 +351,9 @@
       "cache_semantic_hits": 41,
       "cheap_calls": 161,
       "config": "router_heuristic",
-      "cost_ci": [
-        0.2794,
-        0.3806
-      ],
-      "cost_idx_sha": "d460ec96e0f5cad9",
-      "cost_seed": 847910825,
       "cost_usd": 0.32818200000000025,
       "expensive_calls": 11,
       "false_hit_rate": 0.1463,
-      "false_hit_rate_ci": [
-        0.0688,
-        0.2844
-      ],
       "false_hit_rows": [
         130,
         168,
@@ -813,10 +365,6 @@
       "first_latency_ms": 2794.7871670003224,
       "frac": "low",
       "hit_rate": 0.2743,
-      "hit_rate_ci": [
-        0.2214,
-        0.3343
-      ],
       "judged_rows": 233,
       "latency": {
         "mean": 2565.368108440591,
@@ -824,22 +372,6 @@
         "p95": 9637.87685374973,
         "p99": 10972.345798349763
       },
-      "latency_ci": {
-        "p50": [
-          1680.5,
-          1856.5
-        ],
-        "p95": [
-          9021.5,
-          10538.9
-        ],
-        "p99": [
-          10435.3,
-          16598.5
-        ]
-      },
-      "latency_idx_sha": "5bcd1e2d74f2d02c",
-      "latency_seed": 84048863,
       "mean_score": 1.6695,
       "n_errors": 8,
       "n_rows": 237,
@@ -851,13 +383,7 @@
         "paraphrase": 0.7903,
         "trap": 0.4444
       },
-      "quality_ci": [
-        0.794,
-        0.8734
-      ],
       "quality_equiv": 0.8348,
-      "quality_idx_sha": "95b379640b9f3f9c",
-      "quality_seed": 1010817347,
       "tokens_in": 12724,
       "tokens_out": 51516
     }

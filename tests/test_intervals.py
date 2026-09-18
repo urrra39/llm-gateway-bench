@@ -6,6 +6,7 @@ import pytest
 
 from lgb.intervals import (
     bootstrap_ci,
+    bootstrap_percentiles,
     derive_seed,
     newcombe_diff,
     paired_bootstrap_diff,
@@ -56,6 +57,16 @@ def test_newcombe_contains_zero_for_overlapping_rates() -> None:
     diff, lo, hi = newcombe_diff(6, 86, 10, 80)
     assert diff == pytest.approx(0.0552, abs=1e-4)
     assert lo < 0 < hi
+
+
+def test_bootstrap_percentiles_share_one_index_matrix() -> None:
+    values = [float(i) for i in range(100)]
+    cis, sha = bootstrap_percentiles(values, seed=11)
+    assert set(cis) == {50.0, 95.0, 99.0}
+    assert cis[50.0][0] <= 49.5 <= cis[50.0][1]
+    assert len(sha) == 16
+    again, sha2 = bootstrap_percentiles(values, seed=11)
+    assert (cis, sha) == (again, sha2)
 
 
 def test_paired_bootstrap_diff_shared_rows_only() -> None:
