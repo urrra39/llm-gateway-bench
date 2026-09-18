@@ -13,6 +13,7 @@ Validity gates are code, not prose:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import numpy as np
@@ -26,6 +27,8 @@ from lgb.intervals import (
     bootstrap_ci,
     bootstrap_percentiles,
     derive_seed,
+    newcombe_diff,
+    paired_bootstrap_diff,
     wilson,
 )
 from lgb.judge import kappa_report
@@ -380,6 +383,173 @@ def cost_weighted_table(cfg: Config) -> dict[str, Any]:
     }
 
 
+def _paired_series(frame: pd.DataFrame | None, column: str) -> dict[int, float]:
+    if frame is None or not len(frame):
+        return {}
+    ok = frame[frame["error"].isna()]
+    return dict(zip(ok["idx"].tolist(), ok[column].tolist(), strict=True))
+
+
+def _judge_scores(frame: pd.DataFrame | None) -> dict[int, float]:
+    if frame is None or not len(frame):
+        return {}
+    out: dict[int, float] = {}
+    for r in frame.itertuples(index=False):
+        s = 2.0 if bool(r.identical) else r.judge1_score
+        try:
+            f = float(s)
+        except (TypeError, ValueError):
+            continue
+        if f != f:
+            continue
+        out[int(r.idx)] = f / 2.0
+    return out
+
+
+def comparisons_block(cfg: Config) -> list[dict[str, Any]]:
+    """Difference intervals for every README comparison, recomputed from parquet.
+
+    Paired bootstrap over shared row idx (lockstep resampling); Newcombe score
+    intervals for false-hit rates, whose denominators differ. `separated` is
+    false when the 95% interval contains zero.
+    """
+    specs = [
+        ("cost-cache-baseline", "low", "cache", "baseline", "cost", "paired"),
+        ("cost-cache-baseline", "high", "cache", "baseline", "cost", "paired"),
+        ("cost-heur-casc", "low", "router_heuristic", "router_cascade", "cost", "paired"),
+        ("cost-heur-casc", "high", "router_heuristic", "router_cascade", "cost", "paired"),
+        ("qual-heur-casc", "low", "router_heuristic", "router_cascade", "quality", "paired"),
+        ("qual-heur-casc", "high", "router_heuristic", "router_cascade", "quality", "paired"),
+        ("p99-heur-base", "low", "router_heuristic", "baseline", "p99", "paired"),
+        ("p99-heur-base", "high", "router_heuristic", "baseline", "p99", "paired"),
+        ("fhr-casc-heur", "low", "router_cascade", "router_heuristic", "fhr", "newcombe"),
+        ("fhr-casc-heur", "high", "router_cascade", "router_heuristic", "fhr", "newcombe"),
+    ]
+    out = []
+    for cid, frac, a, b, quantity, method in specs:
+        base: dict[str, Any] = {
+            "id": f"{cid}-{frac}",
+            "a": a,
+            "b": b,
+            "frac": frac,
+            "quantity": quantity,
+            "method": method,
+        }
+        if method == "newcombe":
+            sem: dict[str, int] = {}
+            for name in (a, b):
+                frame = read_parquet(run_dir(cfg, name, frac) / "outcomes.parquet")
+                ok = frame[frame["error"].isna()] if frame is not None else None
+                sem[name] = int((ok["kind"] == "cache_semantic").sum()) if ok is not None else 0
+            k_a = _false_hit_count(read_parquet(run_dir(cfg, a, frac) / "judge.parquet"))
+            k_b = _false_hit_count(read_parquet(run_dir(cfg, b, frac) / "judge.parquet"))
+            diff, lo, hi = newcombe_diff(k_a, sem[a], k_b, sem[b])
+            base.update(
+                {
+                    "k_a": k_a,
+                    "n_a": sem[a],
+                    "k_b": k_b,
+                    "n_b": sem[b],
+                    "diff": round(diff, 4),
+                    "lo": round(lo, 4),
+                    "hi": round(hi, 4),
+                    "separated": bool(lo > 0 or hi < 0),
+                }
+            )
+        else:
+            seed = derive_seed(INTERVAL_SEED, frac, f"{a}-vs-{b}", quantity)
+            if quantity == "cost":
+                left = _paired_series(
+                    read_parquet(run_dir(cfg, a, frac) / "outcomes.parquet"), "cost_usd"
+                )
+                right = _paired_series(
+                    read_parquet(run_dir(cfg, b, frac) / "outcomes.parquet"), "cost_usd"
+                )
+            elif quantity == "quality":
+                left = _judge_scores(read_parquet(run_dir(cfg, a, frac) / "judge.parquet"))
+                right = _judge_scores(read_parquet(run_dir(cfg, b, frac) / "judge.parquet"))
+            else:  # p99 latency over shared warm rows
+                left = _paired_latencies(cfg, frac, a)
+                right = _paired_latencies(cfg, frac, b)
+                seed = derive_seed(INTERVAL_SEED, frac, f"{a}-vs-{b}", "p99")
+                diff, lo, hi, sha, n = _paired_percentile_diff(left, right, seed)
+                base.update(
+                    {
+                        "seed": seed,
+                        "idx_sha": sha,
+                        "n_shared": n,
+                        "diff": round(diff, 1),
+                        "lo": round(lo, 1),
+                        "hi": round(hi, 1),
+                        "separated": bool(lo > 0 or hi < 0),
+                    }
+                )
+                out.append(base)
+                continue
+            diff, lo, hi, sha, n = paired_bootstrap_diff(left, right, seed)
+            base.update(
+                {
+                    "seed": seed,
+                    "idx_sha": sha,
+                    "n_shared": n,
+                    "diff": round(diff, 6),
+                    "lo": round(lo, 6),
+                    "hi": round(hi, 6),
+                    "separated": bool(lo > 0 or hi < 0),
+                }
+            )
+        out.append(base)
+    return out
+
+
+def _false_hit_count(judge: pd.DataFrame | None) -> int:
+    if judge is None or not len(judge):
+        return 0
+    n = 0
+    for r in judge.itertuples(index=False):
+        s = 2.0 if bool(r.identical) else r.judge1_score
+        try:
+            f = float(s)
+        except (TypeError, ValueError):
+            continue
+        if f != f:
+            continue
+        dup = str(r.dup_type)
+        if dup in ("paraphrase", "trap") and f == 0 and r.answer_text != r.baseline_text:
+            n += 1
+    return n
+
+
+def _paired_latencies(cfg: Config, frac: str, config: str) -> dict[int, float]:
+    frame = read_parquet(run_dir(cfg, config, frac) / "outcomes.parquet")
+    if frame is None or not len(frame):
+        return {}
+    ok = frame[frame["error"].isna()].sort_values("idx")
+    warm = ok.iloc[1:]
+    return dict(zip(warm["idx"].tolist(), warm["latency_ms"].tolist(), strict=True))
+
+
+def _paired_percentile_diff(
+    x: dict[int, float], y: dict[int, float], seed: int, level: float = 99.0
+) -> tuple[float, float, float, str, int]:
+    shared = sorted(set(x) & set(y))
+    if not shared:
+        return (float("nan"), float("nan"), float("nan"), "", 0)
+    a = np.array([x[i] for i in shared])
+    b = np.array([y[i] for i in shared])
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(shared), size=(BOOTSTRAP_B, len(shared)))
+    diffs = np.percentile(a[idx], level, axis=1) - np.percentile(b[idx], level, axis=1)
+    sha = hashlib.sha256(idx.tobytes()).hexdigest()[:16]
+    return (
+        float(np.percentile(a, level) - np.percentile(b, level)),
+        float(np.percentile(diffs, 2.5)),
+        float(np.percentile(diffs, 97.5)),
+        sha,
+        len(shared),
+    )
+
+
 def cost_weighted_thresholds(cfg: Config) -> dict[str, Any]:
     """Argmin threshold under L = r*fp + fn for loss ratios r in {1,3,10,30,100}.
 
@@ -477,6 +647,7 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
     gates.append(human_label_coverage(cfg))
     gates.append(judge_independence_gate(cfg, kappa))
     cost_weighted = cost_weighted_thresholds(cfg)
+    comparisons = comparisons_block(cfg)
     payload = {
         "run_name": run_name,
         "note": note,
@@ -485,6 +656,7 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
         "metrics": metrics,
         "tuning": tuning,
         "cost_weighted_thresholds": cost_weighted,
+        "comparisons": comparisons,
         "kappa": kappa,
         "interval_methods": {
             "wilson": "Wilson score interval, z=1.96, for binomial rates",
