@@ -193,6 +193,87 @@ def _hist_svg(title: str, frac: str, series: dict[str, list[float]]) -> str:
     return "\n".join(out)
 
 
+def _interval_svg(title: str, groups: list[tuple[str, float, float, float]], ylabel: str) -> str:
+    """Point estimate with Wilson bars; one group per config per fraction."""
+    w, h = 640, 360
+    ml, mr, mt, mb = 56, 16, 36, 60
+    vmax = max(hi for _, _, _, hi in groups) if groups else 1.0
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
+    out.append(f"<text x='{w // 2}' y='22' text-anchor='middle' font-size='14'>{title}</text>")
+    n = len(groups)
+    slot = (w - ml - mr) / max(n, 1)
+
+    def py(v: float) -> float:
+        return h - mb - v / vmax * (h - mt - mb)
+
+    for gi in (0.0, 0.25, 0.5, 0.75, 1.0):
+        gv = gi * vmax
+        out.append(
+            f"<line x1='{ml}' y1='{py(gv):.1f}' x2='{w - mr}' y2='{py(gv):.1f}' stroke='#ddd'/>"
+        )
+        out.append(
+            f"<text x='{ml - 6}' y='{py(gv) + 4:.1f}' text-anchor='end' "
+            f"font-size='9'>{gv:.2f}</text>"
+        )
+    for i, (label, point, lo, hi) in enumerate(groups):
+        x = ml + slot * i + slot / 2
+        color = COLORS.get(label.split()[0], "#333")
+        out.append(
+            f"<line x1='{x:.1f}' y1='{py(lo):.1f}' x2='{x:.1f}' y2='{py(hi):.1f}' "
+            f"stroke='{color}' stroke-width='2'/>"
+        )
+        out.append(f"<circle cx='{x:.1f}' cy='{py(point):.1f}' r='4' fill='{color}'/>")
+        out.append(
+            f"<text x='{x:.1f}' y='{h - mb + 14}' text-anchor='middle' font-size='9'>{label}</text>"
+        )
+    out.append(
+        f"<text x='{(ml + w - mr) / 2:.0f}' y='{h - 22}' text-anchor='middle' "
+        f"font-size='10'>{ylabel}</text>"
+    )
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def _cost_weighted_svg(rows: list[dict[str, float]]) -> str:
+    """Selected threshold per loss ratio: the grid edge wins from r=10 up."""
+    w, h = 640, 360
+    ml, mr, mt, mb = 56, 16, 36, 60
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">']
+    out.append(
+        f"<text x='{w // 2}' y='22' text-anchor='middle' "
+        "font-size='14'>Cost-weighted threshold choice</text>"
+    )
+    n = len(rows)
+    slot = (w - ml - mr) / max(n, 1)
+    tmax = max(r["threshold"] for r in rows) if rows else 1.0
+
+    def py(v: float) -> float:
+        return h - mb - v / tmax * (h - mt - mb)
+
+    for i, r in enumerate(rows):
+        x = ml + slot * i + slot / 2
+        out.append(
+            f"<rect x='{x - 22:.1f}' y='{py(r['threshold']):.1f}' width='44' "
+            f"height='{h - mb - py(r['threshold']):.1f}' fill='#4a7c9b'>"
+            f"<title>r={r['loss_ratio']} thr={r['threshold']} fp={r['fp']} "
+            f"fn={r['fn']}</title></rect>"
+        )
+        out.append(
+            f"<text x='{x:.1f}' y='{h - mb + 14}' text-anchor='middle' "
+            f"font-size='10'>r={r['loss_ratio']:.0f}</text>"
+        )
+        out.append(
+            f"<text x='{x:.1f}' y='{h - mb + 28}' text-anchor='middle' "
+            f"font-size='9'>{r['threshold']:.3f}</text>"
+        )
+    out.append(
+        f"<text x='{(ml + w - mr) / 2:.0f}' y='{h - 8}' text-anchor='middle' "
+        "font-size='10'>loss ratio r in L = r*fp + fn; selected threshold</text>"
+    )
+    out.append("</svg>")
+    return "\n".join(out)
+
+
 def main() -> int:
     import pandas as pd
 
@@ -242,6 +323,37 @@ def main() -> int:
             _hist_svg(f"Latency distribution ({frac} duplicates)", frac, series),
             encoding="utf-8",
         )
+    groups: list[tuple[str, float, float, float]] = []
+    for frac in FRACS:
+        for cfg in ("cache", "router_cascade", "router_heuristic"):
+            entry = metrics[f"{frac}_{cfg}"]
+            ci = entry.get("false_hit_rate_ci") or (0.0, 0.0)
+            groups.append((f"{DISPLAY[cfg]} {frac}", float(entry["false_hit_rate"]), ci[0], ci[1]))
+    (FIGS / "fhr_intervals.svg").write_text(
+        _interval_svg(
+            "False-hit rate with 95% Wilson intervals",
+            groups,
+            "false hits / semantic hits; intervals overlap everywhere",
+        ),
+        encoding="utf-8",
+    )
+    cw = data.get("cost_weighted_thresholds", {})
+    assert isinstance(cw, dict)
+    (FIGS / "cost_weighted_threshold.svg").write_text(
+        _cost_weighted_svg(
+            [
+                {
+                    "loss_ratio": float(r["loss_ratio"]),
+                    "threshold": float(r["threshold"]),
+                    "fp": float(r["fp"]),
+                    "fn": float(r["fn"]),
+                }
+                for r in cw.get("ratios", [])
+                if isinstance(r, dict)
+            ]
+        ),
+        encoding="utf-8",
+    )
     return 0
 
 

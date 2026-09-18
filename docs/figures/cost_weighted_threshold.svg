@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360">
+<text x='320' y='22' text-anchor='middle' font-size='14'>Cost-weighted threshold choice</text>
+<rect x='90.8' y='102.3' width='44' height='197.7' fill='#4a7c9b'><title>r=1.0 thr=0.745 fp=26.0 fn=0.0</title></rect>
+<text x='112.8' y='314' text-anchor='middle' font-size='10'>r=1</text>
+<text x='112.8' y='328' text-anchor='middle' font-size='9'>0.745</text>
+<rect x='204.4' y='40.0' width='44' height='260.0' fill='#4a7c9b'><title>r=3.0 thr=0.98 fp=13.0 fn=25.0</title></rect>
+<text x='226.4' y='314' text-anchor='middle' font-size='10'>r=3</text>
+<text x='226.4' y='328' text-anchor='middle' font-size='9'>0.980</text>
+<rect x='318.0' y='36.0' width='44' height='264.0' fill='#4a7c9b'><title>r=10.0 thr=0.995 fp=2.0 fn=89.0</title></rect>
+<text x='340.0' y='314' text-anchor='middle' font-size='10'>r=10</text>
+<text x='340.0' y='328' text-anchor='middle' font-size='9'>0.995</text>
+<rect x='431.6' y='36.0' width='44' height='264.0' fill='#4a7c9b'><title>r=30.0 thr=0.995 fp=2.0 fn=89.0</title></rect>
+<text x='453.6' y='314' text-anchor='middle' font-size='10'>r=30</text>
+<text x='453.6' y='328' text-anchor='middle' font-size='9'>0.995</text>
+<rect x='545.2' y='36.0' width='44' height='264.0' fill='#4a7c9b'><title>r=100.0 thr=0.995 fp=2.0 fn=89.0</title></rect>
+<text x='567.2' y='314' text-anchor='middle' font-size='10'>r=100</text>
+<text x='567.2' y='328' text-anchor='middle' font-size='9'>0.995</text>
+<text x='340' y='352' text-anchor='middle' font-size='10'>loss ratio r in L = r*fp + fn; selected threshold</text>
+</svg>

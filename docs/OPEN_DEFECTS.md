@@ -31,4 +31,4 @@ An escalation pays two sequential model calls. On the low fraction cascade p99 i
 
 Status: open
 
-On escalated rows model_ms adds the cheap-call time twice, so it can exceed latency_ms. Token and cost accounting sum each call once and are unaffected; only the latency decomposition is inflated.
+On escalated rows model_ms adds the cheap-call time twice, so it can exceed latency_ms (12 low-fraction and 5 high-fraction escalated rows, worst excess 12650.3 ms and 11833.5 ms). Exact fix: record cheap_ms and expensive_ms as two timing fields per escalated row instead of accumulating into one model_ms. The stored rows carry no per-call breakdown, so past rows cannot be repaired by recomputation. Blocks: nothing published (headline tables use latency_ms; the tail decomposition uses latency_ms for tail rows); blocks any future claim that decomposes cascade latency from model_ms.

@@ -17,6 +17,14 @@ Index:
 13. Threshold 0.79 optimised F1; under a false-hit-weighted loss no point ships.
 14. Serve uses benchmark recipes, binds 0.0.0.0, takes an upstream URL override.
 15. The p99 gap is upstream variance plus cascade stacking, not cache overhead.
+16. Exact-match shares are stated per denominator and machine-checked.
+17. Every rate carries a Wilson or bootstrap interval; comparisons carry verdicts.
+18. The exact_only recommendation is measured by replay, quality unmeasured.
+19. Cost-weighted loss picks the grid edge from r=10 up; recall saturation is measured.
+20. Row counts are integers; the tuning/report gap is noise; model_ms stays a defect.
+21. Two label-quality gates fail publicly; the gate line reads 9/11, not 7/9.
+22. Figures are embedded; Docker is verified by a CI job.
+23. No published number moved this round; the description names the finding.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -109,3 +117,76 @@ Rationale: per-request records show tail rows are model-bound misses with
 thousands of output tokens, lookup overhead in milliseconds, and small
 miss-sample noise across wall-clock-separated runs. The cascade tail is
 structural (two sequential calls); its fix is recorded, not implemented.
+
+## 16. Exact-match shares are stated per denominator and machine-checked.
+
+Rationale: the published sentence mixed two denominators (24 of 69 hits is
+34.8%; 24 of 245 requests is 9.8%). Every "X of Y" and every "N%" in the four
+prose files must now match a recomputed pair or value or the audit fails; a
+value-presence check could not catch this class. Proven by doctoring 69 to 70
+and watching the audit fail, then reverting.
+
+## 17. Every rate carries a Wilson or bootstrap interval; comparisons carry verdicts.
+
+Rationale: binomial rates use Wilson 95% (correct at small counts and near
+zero); means, sums and percentiles use percentile bootstrap (B=10000, recorded
+seeds, index-matrix shas in results.json); false-hit differences use Newcombe,
+shared-row differences use lockstep paired bootstrap. Most router orderings do
+not survive: heuristic-vs-cascade cost separates on low only, quality on high
+only, false hits nowhere (about 451 semantic hits per arm needed at
+conventional power). The audit holds a registry of comparative claims and
+fails unregistered comparative sentences.
+
+## 18. The exact_only recommendation is measured by replay, quality unmeasured.
+
+Rationale: exact matching is order-deterministic, so replaying the baseline's
+stored rows reproduces the config without model calls (26 low and 73 high
+exact hits; replay mirrors the baseline error set, hence 26 vs the cache run's
+24 on low). Quality cannot be judged without judge calls — temperature-0
+repeats still differ, so the replay serves texts no judge scored — and is
+reported unmeasured, with the cache run's exact-hit verdicts as an explicit
+proxy (1 of 24 scored 0 on low, 0 of 71 on high with 2 unjudged, which also
+retires the "zero added error" claim).
+
+## 19. Cost-weighted loss picks the grid edge from r=10 up; recall saturation is measured.
+
+Rationale: L = r·fp + fn over the committed sweep selects 0.745 at r=1, 0.98
+at r=3, and the 0.995 grid edge at r=10/30/100 with recall 0.2458 — no
+acceptable point exists. Recall is 1.0000 from 0.30 through 0.79 with the
+first drop at 0.795, so saturation is measured, not a truncated grid (the
+sweep already starts at 0.30).
+
+## 20. Row counts are integers; the tuning/report gap is noise; model_ms stays a defect.
+
+Rationale: successful rows per config are 237/238/238/237 on low and 246 on
+high (gateway errors excluded); no count is written as a range. Tuning-half
+26 of 144 (95% Wilson 0.1263-0.2514) overlaps report-half 4 of 45 and 8 of 85,
+so the factor-of-two gap is sampling noise against small trap counts, not a
+split defect. model_ms double-counting cannot be repaired (no per-call times
+stored); D5 now carries the exact fix and what it blocks.
+
+## 21. Two label-quality gates fail publicly; the gate line reads 9/11, not 7/9.
+
+Rationale: human_label_coverage reads 0/60 = 0.000 against a 0.50 bar and
+judge_independence fails while both judges are deepseek-v4-flash, so
+all_gates_passed is false and the front page shows a full 11-row gate table.
+The instruction said 7/9; the real counts are 9 pass of 11 total, and the
+instruction itself demands real counts, so 9/11 stands and the deviation is
+recorded here.
+
+## 22. Figures are embedded; Docker is verified by a CI job.
+
+Rationale: key figures render inline from relative paths; every committed
+figure is referenced and none orphaned (audit-enforced, http sources banned).
+The container path runs in CI (build, health poll, keyless chat assertion)
+because this machine has no Docker; the local caveat stands only for local runs.
+
+## 23. No published number moved this round; the description names the finding.
+
+Rationale: the results.json diff against the previous primary is purely
+additive (interval fields, two exact_only entries, two gates, cost-weighted
+and comparisons blocks) plus the entailed all_gates_passed flip from true to
+false. The GitHub description now leads with the measured finding
+(136 characters, set via API) instead of "model routing", which the one-model
+constraint contradicts; topics already covered llm, caching, routing,
+cost-optimization, benchmark and fastapi, so they stand.

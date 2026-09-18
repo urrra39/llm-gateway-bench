@@ -41,30 +41,69 @@ and quality is one judge pair from the same model with no human verification.
 Every cost number below is a function of the duplicate fractions, not a
 prediction about anyone's traffic. See docs/CEILING.md.
 
-Validity gates: all_gates_passed=true for run `full` (9/9 PASS).
+Validity gates: all_gates_passed=false for run `full` (9/11 PASS, 2 FAIL, both label-quality gates). The two failures forbid any correctness claim about the quality column: no human has verified a label, and both judges are the same model.
+
+| gate | status | observed |
+|---|---|---|
+| baseline_costs_more_low_cache | PASS | baseline 0.9226 vs cache 0.6139 |
+| baseline_costs_more_low_router_cascade | PASS | baseline 0.9226 vs router_cascade 0.5336 |
+| baseline_costs_more_low_router_heuristic | PASS | baseline 0.9226 vs router_heuristic 0.3282 |
+| false_hit_rate_reported_low | PASS | 0.0889 |
+| baseline_costs_more_high_cache | PASS | baseline 0.9187 vs cache 0.3792 |
+| baseline_costs_more_high_router_cascade | PASS | baseline 0.9187 vs router_cascade 0.2294 |
+| baseline_costs_more_high_router_heuristic | PASS | baseline 0.9187 vs router_heuristic 0.2212 |
+| false_hit_rate_reported_high | PASS | 0.0941 |
+| tuned_threshold_beats_random_control | PASS | tuned 0.79 f1 0.9007633587786259 vs control_mean 0.8279916296353538 max 0.9007633587786259 |
+| human_label_coverage | FAIL | 0/60 = 0.000 |
+| judge_independence | FAIL | primary deepseek-v4-flash == secondary deepseek-v4-flash; kappa 0.8034 (n=338) is self-consistency |
+
+No published number moved in this round: re-running the metrics assembly over
+the same committed parquet reproduces every existing results.json value
+exactly; the file only gained interval fields, two exact_only entries, two
+gates, and two analysis blocks, plus the all_gates_passed flip those gates
+entail.
 
 ## Findings
 
-1. The cache saves real tokens at a measurable quality cost. Cache-plus-long
-   cuts assumed cost 33% on low duplicates (0.9226 to 0.6139) and 59% on high
-   (0.9187 to 0.3792), at quality equiv 0.9308 and 0.9085 against the
-   long-only baseline.
-2. The p99 got worse while the p50 got dramatically better, and that is the
-   most operationally important result here. High-duplicate cache p99 is
-   31169.6 ms against a 25999.2 ms baseline (+20%); low-duplicate cascade p99
-   is 37085.7 ms against 25987.8 ms (+43%). The tail belongs to the upstream
-   model, not the cache: tail rows are cache misses emitting thousands of
-   tokens with model time nearly equal to total latency, while cache lookup
-   overhead is tens of milliseconds. See "The tail belongs upstream" below.
-3. The false-hit rate is 6.98% to 14.63% of semantic hits, and no threshold
-   fixes it: on the tuning half the false-hit rate never falls below 6.45%
-   even at threshold 0.995, where recall has already collapsed to 0.25.
-   The semantic cache is therefore not shippable for correctness-sensitive
-   traffic on this workload; see the revised shipping recommendation.
-4. The heuristic router beats the cascade on cost and loses on quality, so the
-   choice is a genuine trade, not a ranking: high duplicates, heuristic 0.2212
-   at quality 0.8264 with 12.5% false hits versus cascade 0.2294 at 0.8619
-   with 6.98% false hits.
+1. The cache exchanges measured cost for measured quality. Cache-plus-long
+   costs 0.6139 (95% boot 0.5126-0.7216) against a 0.9226 (95% boot
+   0.8125-1.0404) baseline on low duplicates — a 33% saving with
+   non-overlapping 95% cost intervals (paired 95% -0.001787 to -0.000833
+   $/row) — and 0.3792 (95% boot 0.2554-0.5326) against 0.9187 (95% boot
+   0.7973-1.0505) on high, a 59% saving, also separated (paired 95% -0.002810
+   to -0.001551 $/row); quality equiv is 0.9308 (n=224; 95% boot 0.9040-0.9554)
+   and 0.9085 (n=235; 95% boot 0.8766-0.9362) against the long-only baseline.
+2. The p99 and the p50 move in opposite directions, and the shape change —
+   not the point estimates — is the operationally important result here
+   (magnitudes unquantified above).
+   High-duplicate cache p99 reads higher than baseline (31169.6 ms vs
+   25999.2 ms, magnitude unquantified: 95% intervals [11968.7, 49186.1] vs
+   [14125.6, 41179.4] overlap); low-duplicate cascade p99 reads higher than
+   baseline (37085.7 ms vs 25987.8 ms, magnitude unquantified: 95% intervals
+   [20163.1, 68368.3] vs [15659.3, 30842.6] overlap). The tail belongs to the
+   upstream model, not the cache: tail rows are cache misses emitting
+   thousands of tokens with model time nearly equal to total latency, while
+   cache lookup overhead is tens of milliseconds. See "The tail belongs
+   upstream" below.
+3. The false-hit rate runs from 6.98% (6 of 86; 95% Wilson 0.0324-0.1440) to
+   14.63% (6 of 41; 95% Wilson 0.0688-0.2844) of semantic hits, and no
+   threshold fixes it: on the tuning half the false-hit rate never falls
+   below 6.45% even at threshold 0.995, where recall has already collapsed to
+   0.25. The semantic cache is therefore not shippable for
+   correctness-sensitive traffic on this workload; see the revised shipping
+   recommendation.
+4. The two routers are not separated on any single axis consistently. On low
+   duplicates the heuristic costs less than the cascade (paired 95%
+   -0.001608 to -0.000249 $/row, separated); on high duplicates the pair is
+   not separated (paired 95% -0.000347 to 0.000235 $/row). On high duplicates
+   the cascade scores higher quality (paired 95% -0.065957 to -0.004255,
+   separated); on low duplicates quality is not separated (paired 95%
+   -0.069507 to 0.004484). False-hit rates are not separated on either
+   fraction (high: difference 0.0552, 95% Newcombe -0.0375 to 0.1527; low:
+   difference 0.0100, 95% Newcombe -0.1420 to 0.1659). Resolving the
+   high-fraction false-hit gap at conventional power needs about 451 semantic
+   hits per arm, roughly five times the current denominators of 80 and 86 —
+   the gap itself is not separated.
 5. This experiment measured short answers, not cheap models. A real
    cheap/expensive pair with a genuine price ratio would show larger cost
    separation and a different quality cost; this benchmark estimates neither,
@@ -82,36 +121,58 @@ any label).
 Duplicate fractions (input parameters, recorded per workload): low is 10%
 exact, 15% paraphrase, 5% trap, 70% novel; high is 30% exact, 30% paraphrase,
 5% trap, 35% novel. Each fraction builds 500 requests; the report half is 245
-attempted rows for low (237–238 successful, the rest gateway errors excluded
-from metrics) and 249 attempted for high (246 successful). The cache hit rate
+attempted rows for low (237 successful baseline, heuristic and exact_only rows;
+238 cache and cascade rows; the rest gateway errors excluded from metrics) and
+249 attempted for high (246 successful rows in every config). The cache hit rate
 is a property of this construction.
 
 Machine config IDs are kept in parentheses so figures and tables map back to
 `results.json` and the committed parquet; display names describe the recipe.
 
-low duplicate fraction (report half: 245 attempted, 237-238 successful):
+low duplicate fraction (report half: 245 attempted; successful: baseline 237, cache 238, cascade 238, heuristic 237, exact_only 237):
 
 | config | recipe | cost USD | p50 ms | p95 ms | p99 ms | hit rate | false-hit rate | quality equiv |
 |---|---|---|---|---|---|---|---|---|
-| baseline | long only | 0.9226 | 3075.5 | 11657.0 | 25987.8 | 0.0 | null | null (reference) |
-| cache | cache + long | 0.6139 | 2505.1 | 10620.2 | 18942.7 | 0.2899 | 0.0889 (4 rows) | 0.9308 |
-| router_cascade | cache + short, escalate to long | 0.5336 | 1802.9 | 17513.6 | 37085.7 | 0.2815 | 0.1364 (6 rows) | 0.8678 |
-| router_heuristic | cache + short/long by heuristic | 0.3282 | 1772.6 | 9637.9 | 10972.3 | 0.2743 | 0.1463 (6 rows) | 0.8348 |
+| baseline | long only | 0.9226 (95% boot 0.8125-1.0404) | 3075.5 (95% boot 2788.2-3281.5) | 11657.0 (95% boot 10108.3-16990.5) | 25987.8 (95% boot 15659.3-30842.6) | 0.0 (0 of 237; 95% Wilson 0.0000-0.0160) | null | null (reference) |
+| cache | cache + long | 0.6139 (95% boot 0.5126-0.7216) | 2505.1 (95% boot 2310.9-2631.5) | 10620.2 (95% boot 8478.9-13647.5) | 18942.7 (95% boot 13005.2-33566.0) | 0.2899 (69 of 238; 95% Wilson 0.2360-0.3505) | 0.0889 (4 of 45; 95% Wilson 0.0351-0.2073) | 0.9308 (n=224; 95% boot 0.9040-0.9554) |
+| router_cascade | cache + short, escalate to long | 0.5336 (95% boot 0.3774-0.7204) | 1802.9 (95% boot 1657.2-1885.0) | 17513.6 (95% boot 8226.6-21257.7) | 37085.7 (95% boot 20163.1-68368.3) | 0.2815 (67 of 238; 95% Wilson 0.2282-0.3418) | 0.1364 (6 of 44; 95% Wilson 0.0640-0.2671) | 0.8678 (n=227; 95% boot 0.8326-0.9009) |
+| router_heuristic | cache + short/long by heuristic | 0.3282 (95% boot 0.2794-0.3806) | 1772.6 (95% boot 1680.5-1856.5) | 9637.9 (95% boot 9021.5-10538.9) | 10972.3 (95% boot 10435.3-16598.5) | 0.2743 (65 of 237; 95% Wilson 0.2214-0.3343) | 0.1463 (6 of 41; 95% Wilson 0.0688-0.2844) | 0.8348 (n=233; 95% boot 0.7940-0.8734) |
+| exact_only | exact only (replay) | 0.8049 (95% boot 0.6916-0.9251) | 2765.2 (95% boot 2523.8-3046.1) | 11407.4 (95% boot 9768.3-14544.1) | 18934.1 (95% boot 13728.6-29850.4) | 0.1097 (26 of 237; 95% Wilson 0.0760-0.1559) | n/a (1 of 24 judged exact hits scored 0) | unmeasured (see note) |
 
-high duplicate fraction (report half: 249 attempted, 246 successful):
+high duplicate fraction (report half: 249 attempted; successful: baseline 246, cache 246, cascade 246, heuristic 246, exact_only 246):
 
 | config | recipe | cost USD | p50 ms | p95 ms | p99 ms | hit rate | false-hit rate | quality equiv |
 |---|---|---|---|---|---|---|---|---|
-| baseline | long only | 0.9187 | 3205.4 | 12331.5 | 25999.2 | 0.0 | null | null (reference) |
-| cache | cache + long | 0.3792 | 7.0 | 7825.5 | 31169.6 | 0.6423 | 0.0941 (8 rows) | 0.9085 |
-| router_cascade | cache + short, escalate to long | 0.2294 | 7.3 | 5751.3 | 24450.2 | 0.6463 | 0.0698 (6 rows) | 0.8619 |
-| router_heuristic | cache + short/long by heuristic | 0.2212 | 10.0 | 9084.1 | 10517.9 | 0.6057 | 0.125 (10 rows) | 0.8264 |
+| baseline | long only | 0.9187 (95% boot 0.7973-1.0505) | 3205.4 (95% boot 3040.1-3429.7) | 12331.5 (95% boot 10300.0-14125.6) | 25999.2 (95% boot 14125.6-41179.4) | 0.0 (0 of 246; 95% Wilson 0.0000-0.0154) | null | null (reference) |
+| cache | cache + long | 0.3792 (95% boot 0.2554-0.5326) | 7.0 (95% boot 6.3-8.3) | 7825.5 (95% boot 4960.6-13023.0) | 31169.6 (95% boot 11968.7-49186.1) | 0.6423 (158 of 246; 95% Wilson 0.5806-0.6996) | 0.0941 (8 of 85; 95% Wilson 0.0485-0.1749) | 0.9085 (n=235; 95% boot 0.8766-0.9362) |
+| router_cascade | cache + short, escalate to long | 0.2294 (95% boot 0.1372-0.3437) | 7.3 (95% boot 6.6-8.2) | 5751.3 (95% boot 3306.3-8629.6) | 24450.2 (95% boot 8618.0-29737.2) | 0.6463 (159 of 246; 95% Wilson 0.5848-0.7034) | 0.0698 (6 of 86; 95% Wilson 0.0324-0.1440) | 0.8619 (n=239; 95% boot 0.8285-0.8933) |
+| router_heuristic | cache + short/long by heuristic | 0.2212 (95% boot 0.1618-0.2947) | 10.0 (95% boot 8.6-10.9) | 9084.1 (95% boot 6594.7-9581.8) | 10517.9 (95% boot 9310.4-16744.0) | 0.6057 (149 of 246; 95% Wilson 0.5434-0.6647) | 0.125 (10 of 80; 95% Wilson 0.0693-0.2150) | 0.8264 (n=242; 95% boot 0.7872-0.8636) |
+| exact_only | exact only (replay) | 0.6245 (95% boot 0.5137-0.7465) | 2628.0 (95% boot 2422.5-2871.3) | 10388.2 (95% boot 8428.7-12483.4) | 25386.5 (95% boot 12483.4-41179.4) | 0.2967 (73 of 246; 95% Wilson 0.2431-0.3566) | n/a (0 of 71 judged exact hits scored 0; 2 unjudged) | unmeasured (see note) |
 
 Quality equiv is mean judge score divided by 2, where 2 is equivalent to the
 baseline, 1 is partial, 0 is wrong. False hits are semantic-cache hits the
 judge scored 0; they are counted separately and never folded into hit rate.
 Latency percentiles are warm (first request excluded); first-request latency
 is about 2.2-3.0 s per config and is reported separately in results.json.
+
+## Uncertainty: every rate with its denominator and method
+
+Binomial rates (hit rate, false-hit rate, exact-match shares) carry 95%
+Wilson score intervals, which behave at small counts and near zero where the
+normal approximation does not. Means, sums and percentiles (quality equiv,
+cost, latency) carry 95% percentile-bootstrap intervals from 10,000
+resamples; resample seeds and index-matrix shas are stored beside each
+interval in results.json. Newcombe score intervals cover false-hit rates (denominators differ); lockstep
+paired bootstrap over shared row idx covers cost, quality and p99.
+
+| config | hit rate (k/n) [Wilson] | false-hit (k/n) [Wilson] | quality (n) [boot] | cost [boot] |
+|---|---|---|---|---|
+| low cache | 0.2899 (69 of 238) [0.2360, 0.3505] | 0.0889 (4 of 45) [0.0351, 0.2073] | 0.9308 (n=224) [0.9040, 0.9554] | 0.6139 [0.5126, 0.7216] |
+| low cascade | 0.2815 (67 of 238) [0.2282, 0.3418] | 0.1364 (6 of 44) [0.0640, 0.2671] | 0.8678 (n=227) [0.8326, 0.9009] | 0.5336 [0.3774, 0.7204] |
+| low heuristic | 0.2743 (65 of 237) [0.2214, 0.3343] | 0.1463 (6 of 41) [0.0688, 0.2844] | 0.8348 (n=233) [0.7940, 0.8734] | 0.3282 [0.2794, 0.3806] |
+| high cache | 0.6423 (158 of 246) [0.5806, 0.6996] | 0.0941 (8 of 85) [0.0485, 0.1749] | 0.9085 (n=235) [0.8766, 0.9362] | 0.3792 [0.2554, 0.5326] |
+| high cascade | 0.6463 (159 of 246) [0.5848, 0.7034] | 0.0698 (6 of 86) [0.0324, 0.1440] | 0.8619 (n=239) [0.8285, 0.8933] | 0.2294 [0.1372, 0.3437] |
+| high heuristic | 0.6057 (149 of 246) [0.5434, 0.6647] | 0.1250 (10 of 80) [0.0693, 0.2150] | 0.8264 (n=242) [0.7872, 0.8636] | 0.2212 [0.1618, 0.2947] |
 
 ## The tail belongs upstream
 
@@ -127,24 +188,30 @@ Decomposed from the stored per-request records (`latency_ms`, `embed_ms`,
   high duplicates (3033 ms) matches baseline p50 (3205 ms). Two outliers show
   lock contention during full-store re-encode: one 2.4 s lookup on high/cache,
   one 16.5 s lookup on low/heuristic.
-- The high-duplicate cache p99 (+20% vs baseline) is sampling noise over a
+- The high-duplicate cache p99 reads higher than baseline (31169.6 ms vs
+  25999.2 ms, magnitude unquantified: 95% intervals overlap) over a
   heavy-tailed upstream distribution at a different wall-clock time: 87 misses
-  versus 245 baseline calls. The cache adds no per-request cost that could
+  against 245 baseline calls. The cache adds no per-request cost that could
   explain seconds.
-- The low-duplicate cascade p99 (+43%) is structural: an escalation pays two
-  sequential model calls, short then long, with budgets doubled on empty first
-  tries. That stacking is visible in the summed token counts.
-- The heuristic p99 improves on both fractions because the short recipe caps
-  output length and truncates the right tail.
+- The low-duplicate cascade p99 reads higher than baseline (37085.7 ms vs
+  25987.8 ms, magnitude unquantified: 95% intervals overlap) for a structural
+  reason that stands on token counts: an escalation pays two sequential model
+  calls, short then long, with budgets doubled on empty first tries. That
+  stacking is visible in the summed token counts.
+- The heuristic p99 reads lower than baseline on low duplicates (10972.3 ms
+  vs 25987.8 ms, a 15015.5 ms gap with paired 95% -20109.6 to -1588.5,
+  separated) and on high duplicates (10517.9 ms vs 25999.2 ms, a 15481.2 ms
+  gap with paired 95% -30827.9 to -3595.1, separated), because the short
+  recipe caps output length and truncates the right tail.
 
-Operational consequence: this stack halves medians but cannot cap the worst
+Operational consequence: this stack cuts the high-duplicate median to single
+milliseconds (95% cost and latency intervals below) but cannot cap the worst
 case. Anyone with a latency SLO gets a different product than the p50
 suggests — they need a deadline with fallback, not a median. The cascade
 needs a tail-latency budget that skips escalation once the short call has
 eaten most of it (recorded in docs/OPEN_DEFECTS.md, not implemented).
-`docs/figures/latency_low.svg` and `docs/figures/latency_high.svg` show the
-full distributions on a log time axis: hits clustered left, model-bound tail
-right.
+![](docs/figures/latency_low.svg)
+![](docs/figures/latency_high.svg)
 
 Measurement caveat: on escalated cascade rows `model_ms` double-counts the
 short call (e.g. 80514 ms of model time inside a 70403 ms request), so the
@@ -154,9 +221,12 @@ sum each call once and are unaffected.
 ## Duplicate-fraction sensitivity
 
 Cost saving grows with repeats, quality cost does not disappear. Cache-plus-
-long saves 33% on low (0.9226 to 0.6139) and 59% on high (0.9187 to 0.3792).
-Cache plus heuristic routing saves 64% on low and 76% on high, at quality
-0.8348 and 0.8264 respectively. A workload with 60% repeats would show larger
+long saves 33% on low (0.9226 [0.81, 1.04] to 0.6139 [0.51, 0.72], 95% cost
+intervals disjoint) and 59% on high (0.9187 [0.80, 1.05] to 0.3792 [0.26,
+0.53], 95% disjoint). Cache plus heuristic routing shows a 64% saving on low,
+separated (paired 95% -0.002952 to -0.002075 $/row), and 76% on high,
+separated (paired 95% -0.003330 to -0.002366 $/row), at quality 0.8348 and
+0.8264 respectively. A workload dominated by repeats would show larger
 savings that mean nothing about production traffic.
 
 ## False hits: the trade curve and what ships
@@ -170,7 +240,7 @@ and the curve shows the cache cannot get there:
 
 | threshold | hit rate (tuning half) | recall | false-hit rate |
 |---|---|---|---|
-| 0.79 (shipped) | 0.3556 | 1.0000 | 0.1806 |
+| 0.79 (shipped, F1 choice) | 0.3556 | 1.0000 | 0.1806 |
 | 0.85 | 0.3506 | 0.9915 | 0.1761 |
 | 0.90 | 0.3432 | 0.9661 | 0.1799 |
 | 0.95 | 0.3259 | 0.9237 | 0.1742 |
@@ -178,17 +248,53 @@ and the curve shows the cache cannot get there:
 | 0.99 | 0.1728 | 0.5339 | 0.1000 |
 | 0.995 | 0.0765 | 0.2458 | 0.0645 |
 
+Recall is 1.0000 from 0.30 through 0.79 and first drops at 0.795: the sweep
+grid already starts at 0.30, so the saturation is measured (every should-hit
+tune pair scores at or above 0.79), not a truncated grid. Under an explicit
+cost-weighted loss L = r·fp + fn, recomputed over the same grid:
+
+| loss ratio r | threshold | fp | fn | false-hit rate | recall |
+|---|---|---|---|---|---|
+| 1 | 0.745 | 26 | 0 | 0.1806 | 1.0 |
+| 3 | 0.98 | 13 | 25 | 0.1226 | 0.7881 |
+| 10 | 0.995 | 2 | 89 | 0.0645 | 0.2458 |
+| 30 | 0.995 | 2 | 89 | 0.0645 | 0.2458 |
+| 100 | 0.995 | 2 | 89 | 0.0645 | 0.2458 |
+
+Under a 10x loss ratio the repository would choose 0.995 — the grid edge —
+with recall 0.2458: the grid contains no acceptable point, which is why the
+recommendation above does not name a semantic threshold at all.
+`docs/figures/cost_weighted_threshold.svg` marks the three distinct argmins.
+
+Why the tuning half reads hotter than the report half. Tuning-half false hits
+are 26 of 144 eligible predicted hits (95% Wilson 0.1263-0.2514); report-half
+are 4 of 45 (95% Wilson 0.0351-0.2073) on low duplicates and 8 of 85 (95%
+Wilson 0.0485-0.1749) on high. Both report-half 95% intervals overlap the
+tuning-half 95% interval, so the factor-of-two point gap is sampling noise,
+not a split defect. Composition differs only in small counts (low trap rows 16 tune
+against 9 report; high 9 against 16), and the denominators differ by
+construction: the tuning rate is simulated over eligible tune rows while the
+report rate is measured over semantic hits only.
+
 No threshold reaches 2% false hits; at 0.995 the rate is still 6.45% with
 recall destroyed. `docs/figures/threshold_tradeoff.svg` plots all three
 curves with the chosen point marked. Revised recommendation: do not ship the
 semantic cache for correctness-sensitive traffic on this workload. Ship the
-exact-match cache — a verbatim repeat served from store, wrong only if the
-original answer was wrong — which contributes roughly 10% of low-duplicate
-hits (24 of 69) and 28% of high-duplicate hits (73 of 158) at zero added
-error, plus short-recipe routing wherever one-sentence answers are
-acceptable. Where approximate answers are tolerable, threshold 0.97 keeps a
-0.30 hit rate at 15.7% tuning-half false hits; that is a product decision
-with eyes open, not a default.
+exact-match cache — a verbatim repeat served from store — which covers 24 of
+69 hits (34.8%), which is 24 of 245 attempted requests (9.8%), on low
+duplicates, and 73 of 158 hits (46.2%), which is 73 of 249 attempted requests
+(29.3%), on high duplicates; plus short-recipe routing wherever one-sentence
+answers are acceptable. Exact hits are wrong only when the stored answer was
+wrong: 1 of 24 judged exact hits scored 0 on low duplicates, 0 of 71 on high
+(2 unjudged), so exact-match is near-error-free but not error-free. Quality
+equiv for the replay is unmeasured — judging its stored texts would need new
+judge calls — with the cache run's exact-hit verdicts (21 scored 2, 2 scored
+1, 1 scored 0 on low; 68 scored 2, 3 scored 1 on high) as the closest observed
+proxy, not a measurement. Hit latency in the replay is the measured median
+cache_exact latency (0.53 ms low, 0.25 ms high): replayed, not measured, and
+fresh upstream latency variance is not captured. Where approximate answers
+are tolerable, threshold 0.97 keeps a 0.30 hit rate at 15.7% tuning-half false
+hits; that is a product decision with eyes open, not a default.
 
 What fooled the cache, in full. PAWS traps are near-duplicates with flipped
 meaning, and embeddings rank them nearest:
@@ -213,10 +319,24 @@ meaning, and embeddings rank them nearest:
 
 ## Figures
 
+Regenerate every figure from results.json in one command:
+
+```
+.venv/bin/python scripts/make_figures.py
+```
+
+![](docs/figures/threshold_tradeoff.svg)
+![](docs/figures/fhr_intervals.svg)
+![](docs/figures/cost_weighted_threshold.svg)
+
 - docs/figures/cost_by_config.svg: assumed cost by config for each fraction.
 - docs/figures/quality_by_config.svg: quality equiv by config for each fraction.
 - docs/figures/threshold_tradeoff.svg: recall, hit rate and false-hit rate
   across the tuning grid with 0.79 marked (source data/runs/threshold_sweep.parquet).
+- docs/figures/fhr_intervals.svg: false-hit rate with 95% Wilson intervals
+  per config; intervals overlap everywhere.
+- docs/figures/cost_weighted_threshold.svg: selected threshold per loss
+  ratio; the grid edge is the argmin from r=10 up.
 - docs/figures/latency_low.svg and docs/figures/latency_high.svg: warm
   per-request latency distributions per config on a log axis.
 
@@ -234,7 +354,7 @@ make all
 `make pilot` runs a 50-request sanity path on the low fraction. `make all`
 rebuilds workloads, tunes the threshold on one half, runs all four configs on
 both fractions, judges, assembles results.json, and audits docs. All stages
-are resumable with atomic parquet checkpointing; a kill loses at most one row.
+are resumable with atomic parquet checkpointing; a kill discards at most one in-flight row.
 The embeddings extra (sentence-transformers plus torch CPU) is needed for
 tuning and cached runs; serve alone answers with exact-match caching without
 downloaded weights.
@@ -258,7 +378,7 @@ user content `Explain this statement: "The cat sat on the mat."`,
 `max_tokens` 4096, `temperature` 0, `reasoning_effort` low. Only
 deepseek-v4-flash returned content (219 chars); the other four returned
 budget-quota exhaustion and glm-5.3 no available channel. No second model was
-found, so nothing was re-run and no price difference was simulated. A full
+found, so nothing was re-run and no price split was simulated. A full
 router re-run would have cost about 42 minutes wall-clock and about 4.15
 assumed dollars of workload calls plus judging; it was not spent because
 there is no second model to run it on.
@@ -292,10 +412,18 @@ Judge rubric is frozen in config/bench.yaml. Per-row verdicts persist under
 data/runs/*/judge.parquet. Judge self-consistency is κ 0.8034 with n=338
 (observed 0.9408, expected 0.6991): the same model judging twice, not
 inter-family agreement. No human has verified any label.
-data/human_validation.csv ships the 60 highest-value rows (false hits, judge
-disagreements, escalations first) with an empty human_label column; fill it and
-run `python -m lgb human-agreement --csv path` to compute judge-versus-human
-agreement. Unverified labels are written as unverified.
+data/human_validation.csv ships the 60 highest-value rows with an empty
+human_label column, ordered false hits first, then judge disagreements, then
+escalations (see `priority` in src/lgb/humanval.py). Fill it and run the exact
+command below to compute judge-versus-human agreement with kappa plus its
+denominator; rows with an empty human_label are skipped, so a partially
+filled file already reports:
+
+```
+.venv/bin/python -m lgb human-agreement --csv data/human_validation.csv
+```
+
+Unverified labels are written as unverified.
 
 ## Serving with Docker (unverified here: no Docker on this machine)
 
@@ -328,5 +456,9 @@ LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or use host networking.
   is archived and does not reproduce.
 - Judge costs are not included in reported spend; total workload spend is about
   4.15 assumed dollars across all eight runs.
-- Tail latencies reflect upstream variance at measurement time; p99 gaps
-  between configs are dominated by it (see finding above).
+- Tail latencies reflect upstream variance at measurement time; the size of
+  any p99 spread across configs is unquantified (see finding above).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
