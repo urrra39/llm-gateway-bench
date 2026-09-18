@@ -44,7 +44,9 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Cold image builds (torch CPU wheel) run past 20 minutes; the prior
+    # green run took about 16.5. Layer cache covers the repeat case.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
