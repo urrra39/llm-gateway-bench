@@ -144,6 +144,7 @@ def tune_threshold(cfg: Config, embedder: Embedder) -> dict[str, Any]:
         elig_parts.append(eligible)
 
     grid = np.round(np.arange(0.30, 0.999, 0.005), 4)
+
     # Score every fraction's replay and sum the confusion counts, so the chosen
     # threshold is not tuned to one duplicate fraction.
     def scored(thr: float) -> dict[str, float]:

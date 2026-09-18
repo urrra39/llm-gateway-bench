@@ -142,9 +142,7 @@ def exact_only_metrics(cfg: Config, frac: str) -> dict[str, Any]:
     cache_judge = read_parquet(run_dir(cfg, "cache", frac) / "judge.parquet")
     if base is None or not len(base) or cache_out is None:
         return {"config": "exact_only", "frac": frac, "present": False}
-    nominal_hit_ms = float(
-        cache_out.loc[cache_out["kind"] == "cache_exact", "latency_ms"].median()
-    )
+    nominal_hit_ms = float(cache_out.loc[cache_out["kind"] == "cache_exact", "latency_ms"].median())
     rows = list(base.sort_values("idx").itertuples(index=False))
     stored: dict[str, bool] = {}
     n_errors = 0
@@ -304,9 +302,7 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
         "mean_score": round(float(np.mean(scores)), 4) if scores else None,
         "false_hit_rate": (round(len(false_hits) / semantic_hits, 4) if semantic_hits else None),
         "false_hit_rate_ci": (
-            [round(v, 4) for v in wilson(len(false_hits), semantic_hits)]
-            if semantic_hits
-            else None
+            [round(v, 4) for v in wilson(len(false_hits), semantic_hits)] if semantic_hits else None
         ),
         "false_hit_rows": false_hits,
         "quality_by_dup": {
