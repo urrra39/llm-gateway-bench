@@ -425,7 +425,12 @@ filled file already reports:
 
 Unverified labels are written as unverified.
 
-## Serving with Docker (unverified here: no Docker on this machine)
+## Serving with Docker (verified in CI, not locally: this machine has no Docker)
+
+Container path verified by the `docker` job in
+https://github.com/urrra39/llm-gateway-bench/actions/runs/35343182976
+(image builds, `/health` returns ok, a keyless chat request 500s with `chat
+failed` in the container logs, container torn down).
 
 ```
 docker compose up --build
