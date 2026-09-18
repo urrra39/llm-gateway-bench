@@ -30,5 +30,55 @@ jobs:
             echo "authorship trailer found" >&2
             exit 1
           fi
+      # Model names are objects of study and are whitelisted. Excluded from
+      # its own scan: this workflow file (it carries the search pattern) and
+      # the public PAWS sample (a source sentence contains "with the help of").
+      - name: Authorship file contents
+        run: |
+          if git grep -iE "co-authored|generated with|copilot|assisted by|ai assistance|with the help of" -- . ':!.github/workflows/ci.yml' ':!data/workload/paws_sample.csv' | grep -viE "deepseek-v4-flash|glm-5.3|all-minilm-l6-v2"; then
+            echo "authorship statement found in tracked files" >&2
+            exit 1
+          fi
       - name: Audit docs
         run: uv run python scripts/audit_docs.py
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: llm-gateway-bench:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start gateway
+        run: |
+          docker run -d --name gateway -p 8000:8000 \
+            -e LGB_GATEWAY_BASE_URL=http://127.0.0.1:9/v1 \
+            llm-gateway-bench:ci
+      - name: Poll health and exercise keyless chat
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf localhost:8000/health | grep -q '"ok": *true'; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf localhost:8000/health | grep -q '"ok": *true'
+          code=$(curl -s -o /tmp/chat.json -w "%{http_code}" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"}]}' \
+            localhost:8000/v1/chat/completions)
+          echo "chat status: $code"
+          test "$code" = "500"
+          docker logs gateway 2>&1 | grep -q "chat failed"
+      - name: Teardown
+        if: always()
+        run: docker rm -f gateway
