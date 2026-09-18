@@ -416,6 +416,8 @@ def comparisons_block(cfg: Config) -> list[dict[str, Any]]:
     specs = [
         ("cost-cache-baseline", "low", "cache", "baseline", "cost", "paired"),
         ("cost-cache-baseline", "high", "cache", "baseline", "cost", "paired"),
+        ("cost-heur-base", "low", "router_heuristic", "baseline", "cost", "paired"),
+        ("cost-heur-base", "high", "router_heuristic", "baseline", "cost", "paired"),
         ("cost-heur-casc", "low", "router_heuristic", "router_cascade", "cost", "paired"),
         ("cost-heur-casc", "high", "router_heuristic", "router_cascade", "cost", "paired"),
         ("qual-heur-casc", "low", "router_heuristic", "router_cascade", "quality", "paired"),
