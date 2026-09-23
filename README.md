@@ -110,7 +110,7 @@ entail.
    and 0.9085 (n=235; 95% boot 0.8766-0.9362) against the long-only baseline.
 2. The p99 and the p50 move in opposite directions, and the shape change —
    not the point estimates — is the operationally important result here
-   (magnitudes unquantified above).
+   (magnitudes unquantified below).
    High-duplicate cache p99 reads higher than baseline (31169.6 ms vs
    25999.2 ms, magnitude unquantified: 95% intervals [11968.7, 49186.1] vs
    [14125.6, 41179.4] overlap); low-duplicate cascade p99 reads higher than
@@ -197,8 +197,9 @@ Wilson score intervals, which behave at small counts and near zero where the
 normal approximation does not. Means, sums and percentiles (quality equiv,
 cost, latency) carry 95% percentile-bootstrap intervals from 10,000
 resamples; resample seeds and index-matrix shas are stored beside each
-interval in results.json. Newcombe score intervals cover false-hit rates (denominators differ); lockstep
-paired bootstrap over shared row idx covers cost, quality and p99.
+interval in results.json. Newcombe score intervals cover false-hit rates
+(denominators differ); lockstep paired bootstrap over shared row idx covers
+cost, quality and p99.
 
 | config | hit rate (k/n) [Wilson] | false-hit (k/n) [Wilson] | quality (n) [boot] | cost [boot] |
 |---|---|---|---|---|
@@ -245,6 +246,7 @@ case. Anyone with a latency SLO gets a different product than the p50
 suggests — they need a deadline with fallback, not a median. The cascade
 needs a tail-latency budget that skips escalation once the short call has
 eaten most of it (recorded in docs/OPEN_DEFECTS.md, not implemented).
+
 ![](docs/figures/latency_low.svg)
 ![](docs/figures/latency_high.svg)
 
@@ -255,11 +257,11 @@ sum each call once and are unaffected.
 
 ## Duplicate-fraction sensitivity
 
-Cost saving grows with repeats, quality cost does not disappear. Cache-plus-
-long saves 33% on low (0.9226 [0.81, 1.04] to 0.6139 [0.51, 0.72], 95% cost
-intervals disjoint) and 59% on high (0.9187 [0.80, 1.05] to 0.3792 [0.26,
-0.53], 95% disjoint). Cache plus heuristic routing shows a 64% saving on low,
-separated (paired 95% -0.002952 to -0.002075 $/row), and 76% on high,
+Cost saving grows with repeats, quality cost does not disappear.
+Cache-plus-long saves 33% on low (0.9226 [0.81, 1.04] to 0.6139 [0.51, 0.72],
+95% cost intervals disjoint) and 59% on high (0.9187 [0.80, 1.05] to 0.3792
+[0.26, 0.53], 95% disjoint). Cache plus heuristic routing shows a 64% saving
+on low, separated (paired 95% -0.002952 to -0.002075 $/row), and 76% on high,
 separated (paired 95% -0.003330 to -0.002366 $/row), at quality 0.8348 and
 0.8264 respectively. A workload dominated by repeats would show larger
 savings that mean nothing about production traffic.

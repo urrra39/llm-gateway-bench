@@ -12,8 +12,10 @@ prediction about anyone's traffic.
 2. Since 2026-09-17 both tiers are deepseek-v4-flash with different prompts and
    token budgets. Router savings are measured token savings, not a comparison
    of vendors.
-3. Quality is a stronger-model judge at temperature 0 on a frozen rubric, with
-   a second judge from the same model. No human has verified any label.
+3. Quality is judged by deepseek-v4-flash at temperature 0 on a frozen rubric
+   — the same model that produced the answers — with a second judge from that
+   same model. No human has verified any label, so no correctness claim about
+   the quality column is available at all.
 4. Prices are an assumed per-token rate with the date recorded, not a provider
    quote. The measured quantity is tokens.
 5. Latency is measured on a warm process; the first-request cost is reported
