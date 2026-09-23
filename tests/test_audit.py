@@ -105,3 +105,90 @@ def test_audit_flags_an_external_image(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(audit, "README", target)
     errors: list[str] = audit.check_figures()
     assert any("http" in e for e in errors)
+
+
+def test_audit_flags_a_sized_image_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped defect: an image host URL with a display-width query."""
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    target = tmp_path / "README.md"
+    target.write_text(
+        readme + "\n![](https://sspark.example.ai/i/lYwyABsnZmcYkfsx?width=1024)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_figures()
+    assert any("external image URL" in e for e in errors)
+
+
+def test_audit_flags_a_bare_url_used_as_a_figure_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P2's damage class: a URL in the code span where a filename belongs."""
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    target = tmp_path / "README.md"
+    target.write_text(
+        readme + "\n`https://example.com/Iz3YIk6YJvK8ujGF` plots the trade curve.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_figures()
+    assert any("bare external URL as a name" in e for e in errors)
+
+
+def test_audit_allows_localhost_in_a_code_span(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gateway's own loopback URL is a real address, not a figure name."""
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    target = tmp_path / "README.md"
+    target.write_text(readme + "\nUpstream is `http://127.0.0.1:8787/v1` locally.\n", "utf-8")
+    monkeypatch.setattr(audit, "README", target)
+    assert audit.check_figures() == []
+
+
+def test_audit_flags_a_dangling_figure_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    target = tmp_path / "README.md"
+    target.write_text(readme + "\n![](docs/figures/not_generated.svg)\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_figures()
+    assert any("not_generated.svg" in e and "not on disk" in e for e in errors)
+
+
+def test_audit_flags_an_orphaned_figure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A committed plot no document mentions is dead weight, and was.
+
+    Runs against an isolated tree: the guard scans every tracked document, so
+    orphanhood is only observable when the whole document set is controlled.
+    """
+    audit = _load_audit()
+    figures = tmp_path / "docs" / "figures"
+    figures.mkdir(parents=True)
+    (figures / "referenced.svg").write_text("<svg/>", encoding="utf-8")
+    (figures / "orphan.svg").write_text("<svg/>", encoding="utf-8")
+    readme = tmp_path / "README.md"
+    readme.write_text("![](docs/figures/referenced.svg)\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "REPO", tmp_path)
+    monkeypatch.setattr(audit, "README", readme)
+    for name in ("CEILING", "DECISIONS", "OPEN_DEFECTS", "HUMAN_LABELING"):
+        monkeypatch.setattr(audit, name, tmp_path / "docs" / f"{name}.md")
+    errors: list[str] = audit.check_figures()
+    assert errors == ["docs/figures/orphan.svg is on disk but unreferenced (orphaned)"]
+
+
+def test_audit_scans_documents_beyond_the_readme(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An external image smuggled into any tracked document must fail too."""
+    audit = _load_audit()
+    target = tmp_path / "HUMAN_LABELING.md"
+    target.write_text("![](https://example.com/labels.png)\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "HUMAN_LABELING", target)
+    errors: list[str] = audit.check_figures()
+    assert any("HUMAN_LABELING.md" in e and "http" in e for e in errors)

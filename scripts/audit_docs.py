@@ -5,6 +5,9 @@ Checks:
 - Validity gates pass or their failure is published (all_gates_passed is a bool;
   individual gate rows are recomputed where cheap to recompute).
 - Numbers repeated across README, docs/CEILING.md and docs/DECISIONS.md agree.
+- No tracked document sources an image off this repository, no bare external
+  URL stands where a figure name belongs, every referenced figure path exists,
+  and no committed figure is orphaned.
 - docs/OPEN_DEFECTS.md matches the DEFECTS source list below, so the two
   cannot drift.
 
@@ -28,6 +31,7 @@ README = REPO / "README.md"
 CEILING = REPO / "docs" / "CEILING.md"
 DECISIONS = REPO / "docs" / "DECISIONS.md"
 OPEN_DEFECTS = REPO / "docs" / "OPEN_DEFECTS.md"
+HUMAN_LABELING = REPO / "docs" / "HUMAN_LABELING.md"
 
 EXPECTED_CONFIGS = ("baseline", "cache", "router_cascade", "router_heuristic")
 EXPECTED_FRACS = ("low", "high")
@@ -371,19 +375,80 @@ def _check_cell_intervals(
     return errors
 
 
+#: Hosts a figure may legitimately name in prose: the gateway's own loopback
+#: addresses and the Docker bridge. Anything else in an image position or in a
+#: code span is an off-repository dependency for a committed plot.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal", "172.17.0.1")
+
+#: An http(s) URL shaped like an image: an image extension, or the display
+#: sizing query that an image host appends. This is the pattern that shipped
+#: five external <img> sources into the README once.
+IMAGE_URL = re.compile(
+    r"https?://\S*?(?:\.(?:png|jpe?g|gif|svg|webp)\b|[?&](?:width|w|height|h)=\d+)",
+    re.IGNORECASE,
+)
+#: An inline code span (not a fenced block) holding an http(s) URL. In these
+#: documents a code span is where a filename, path or command belongs, so a
+#: URL inside one is a figure name that was replaced by its source address.
+CODE_SPAN = re.compile(r"`([^`\n]+)`")
+IMAGE_SOURCE = re.compile(
+    r"!\[[^\]]*\]\(\s*(https?://[^)\s]+)|<img[^>]+src=[\"']\s*(https?://[^\"']+)"
+)
+
+
+def _is_external(url: str) -> bool:
+    return not any(host in url for host in LOCAL_HOSTS)
+
+
+def _strip_fenced_blocks(text: str) -> str:
+    """Blank out ``` fenced blocks so a documented shell command that happens
+    to contain a URL (git clone, curl) is not read as a figure reference."""
+    return re.sub(r"```.*?```", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.DOTALL)
+
+
+def _figure_docs() -> tuple[Path, ...]:
+    """Every tracked prose document, resolved at call time so a test can point
+    one constant at a doctored copy and still have the rest scanned."""
+    known = (README, CEILING, DECISIONS, OPEN_DEFECTS, HUMAN_LABELING)
+    extra = [
+        p
+        for p in sorted({*REPO.glob("*.md"), *(REPO / "docs").glob("*.md")})
+        if p not in known and p.is_file()
+    ]
+    return (*(p for p in known if p.is_file()), *extra)
+
+
 def check_figures() -> list[str]:
+    """No document may source an image off this repository, and every
+    committed figure must be referenced by a path that resolves on disk.
+
+    Four failure classes, each of which has shipped at least once: an http(s)
+    image source; a bare external URL standing where a figure name belongs; a
+    referenced path with no file behind it; and a committed figure no document
+    mentions.
+    """
     errors: list[str] = []
-    readme = README.read_text(encoding="utf-8")
-    for doc in (README, CEILING, DECISIONS):
-        text = doc.read_text(encoding="utf-8")
-        if re.search(r"!\[[^\]]*\]\(https?://|<img[^>]+src=[\"']https?://", text):
-            errors.append(f"{doc.name} embeds an http(s) image source")
-    referenced = set(re.findall(r"docs/figures/([\w\-.]+)", readme))
+    docs = _figure_docs()
+    referenced: set[str] = set()
+    for doc in docs:
+        raw = doc.read_text(encoding="utf-8")
+        prose = _strip_fenced_blocks(raw)
+        referenced |= set(re.findall(r"docs/figures/([\w\-.]+)", raw))
+        for match in IMAGE_SOURCE.finditer(raw):
+            url = match.group(1) or match.group(2)
+            errors.append(f"{doc.name} embeds an http(s) image source: {url}")
+        for match in IMAGE_URL.finditer(prose):
+            errors.append(f"{doc.name} names an external image URL: {match.group(0)}")
+        for match in CODE_SPAN.finditer(prose):
+            span = match.group(1).strip()
+            url = re.search(r"https?://\S+", span)
+            if url is not None and _is_external(url.group(0)):
+                errors.append(f"{doc.name} uses a bare external URL as a name: `{span}`")
     on_disk = {p.name for p in (REPO / "docs" / "figures").glob("*") if p.is_file()}
     for name in sorted(referenced):
         if name not in on_disk:
-            errors.append(f"README references docs/figures/{name} which is not on disk")
-        if not name.endswith(".svg"):
+            errors.append(f"docs reference docs/figures/{name} which is not on disk")
+        elif not name.endswith(".svg"):
             errors.append(f"docs/figures/{name} is referenced as a figure but is not a plot")
     for name in sorted(on_disk):
         if name not in referenced:
