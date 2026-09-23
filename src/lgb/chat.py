@@ -26,6 +26,25 @@ class ChatResult:
     latency_s: float = 0.0
 
 
+class UpstreamError(RuntimeError):
+    """No completion could be obtained from the configured upstream.
+
+    The message names the environment variable that controls the failing
+    setting, because the common case is a stranger with no upstream at all:
+    a generic "chat failed" sends them reading source to find out which knob
+    they are missing. `env_var` carries the same name for the API layer.
+    """
+
+    def __init__(self, message: str, env_var: str) -> None:
+        super().__init__(message)
+        self.env_var = env_var
+
+
+#: Environment variable that points the stack at an OpenAI-compatible upstream.
+#: Declared here so the error text and config.Config.load cannot drift apart.
+BASE_URL_ENV = "LGB_GATEWAY_BASE_URL"
+
+
 @dataclass(frozen=True)
 class TokenPrice:
     input_per_mtok: float
@@ -84,19 +103,31 @@ class Gateway:
         if self.cfg.generation.reasoning_effort:
             payload["reasoning_effort"] = self.cfg.generation.reasoning_effort
         last_error: str | None = None
+        unreachable = False
+        unauthorized = False
         started = time.perf_counter()
         for attempt in range(self.cfg.gateway.max_retries):
             try:
                 resp = self._client.post("/chat/completions", json=payload, headers=self._headers)
                 body = resp.json()
-            except (httpx.HTTPError, ValueError) as exc:  # network or JSON
+            except httpx.TransportError as exc:  # no route, refused, DNS, timeout
                 last_error = f"{type(exc).__name__}: {exc}"
+                unreachable = True
                 time.sleep(1.0 * (attempt + 1))
                 continue
+            except (httpx.HTTPError, ValueError) as exc:  # protocol or JSON
+                last_error = f"{type(exc).__name__}: {exc}"
+                unreachable = False
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            unreachable = False
             if resp.status_code != 200 or "choices" not in body:
                 last_error = f"http {resp.status_code}: {json.dumps(body)[:300]}"
+                unauthorized = resp.status_code in (401, 403)
                 # budget/quota exhaustion will not clear on retry within seconds
                 if resp.status_code == 429 or "quota" in str(body).lower():
+                    break
+                if unauthorized:
                     break
                 time.sleep(1.0 * (attempt + 1))
                 continue
@@ -111,4 +142,36 @@ class Gateway:
                 raw=body,
                 latency_s=elapsed,
             )
-        raise RuntimeError(f"chat failed for {model}: {last_error}")
+        raise self._failure(model, last_error, unreachable, unauthorized)
+
+    def _failure(
+        self, model: str, last_error: str | None, unreachable: bool, unauthorized: bool
+    ) -> UpstreamError:
+        """Turn the last transport or HTTP error into an actionable message.
+
+        Keeps the `chat failed for <model>` prefix the container probe and the
+        README both quote, then names the variable that would fix it.
+        """
+        base = self.cfg.gateway.base_url
+        key_env = self.cfg.gateway.api_key_env or "the gateway api_key_env"
+        head = f"chat failed for {model}: {last_error}"
+        if unreachable:
+            return UpstreamError(
+                f"{head}. No OpenAI-compatible endpoint answered at {base}. "
+                f"Set {BASE_URL_ENV} to a reachable /v1 endpoint "
+                f"(and {key_env} if that endpoint needs a bearer token).",
+                BASE_URL_ENV,
+            )
+        if unauthorized:
+            return UpstreamError(
+                f"{head}. The endpoint at {base} rejected the credentials. "
+                f"Set {key_env} to a key valid for that endpoint, "
+                f"or point {BASE_URL_ENV} at one that answers keyless.",
+                key_env,
+            )
+        return UpstreamError(
+            f"{head}. The endpoint at {base} answered but served no completion. "
+            f"Check {BASE_URL_ENV} names an OpenAI-compatible /v1 endpoint "
+            f"that serves the model {model!r}.",
+            BASE_URL_ENV,
+        )

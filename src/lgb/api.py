@@ -7,15 +7,20 @@ instrumentation is returned in the response body's x_gateway object.
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
 from fastapi import FastAPI, Request
 
 from lgb.cache import CacheItem, SemanticCache
-from lgb.chat import Gateway
+from lgb.chat import Gateway, UpstreamError
 from lgb.config import Config
 from lgb.router import CascadeRouter
+
+#: uvicorn owns the handlers when the container runs, so an upstream failure
+#: reaches `docker logs` through its logger rather than a bare traceback.
+log = logging.getLogger("uvicorn.error")
 
 
 def build_app(cfg: Config) -> FastAPI:
@@ -25,6 +30,22 @@ def build_app(cfg: Config) -> FastAPI:
     gw = Gateway(cfg)
     cache = SemanticCache(cfg.cache.sim_threshold, None, exact=True)
     cascade = CascadeRouter(cfg.router)
+
+    @app.exception_handler(UpstreamError)
+    async def upstream_unavailable(_request: Request, exc: UpstreamError) -> JSONResponse:
+        """A missing upstream is a configuration problem, so say which
+        variable configures it instead of returning a bare 500."""
+        log.error("%s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "message": str(exc),
+                    "type": "upstream_unavailable",
+                    "param": exc.env_var,
+                }
+            },
+        )
 
     @app.get("/health")
     def health() -> dict[str, Any]:

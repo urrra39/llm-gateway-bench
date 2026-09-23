@@ -79,8 +79,16 @@ jobs:
             -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"hi"}]}' \
             localhost:8000/v1/chat/completions)
           echo "chat status: $code"
+          cat /tmp/chat.json
           test "$code" = "500"
+          # The unconfigured-upstream error must name the variable to set,
+          # in the response body and in the container log, not just say
+          # "chat failed". README documents exactly this shape.
+          grep -q '"param": *"LGB_GATEWAY_BASE_URL"' /tmp/chat.json
+          grep -q '"type": *"upstream_unavailable"' /tmp/chat.json
+          grep -q 'chat failed for deepseek-v4-flash' /tmp/chat.json
           docker logs gateway 2>&1 | grep -q "chat failed"
+          docker logs gateway 2>&1 | grep -q "LGB_GATEWAY_BASE_URL"
       - name: Teardown
         if: always()
         run: docker rm -f gateway

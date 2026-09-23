@@ -13,26 +13,61 @@ cost in answer quality against an always-use-the-long-recipe baseline?
 
 ## Quickstart
 
-Three commands from clone to a served response (needs Python 3.11 and uv;
-no API key — the dev gateway answers keyless):
+What works with no credentials and no endpoint: the server starts and
+`/health` answers, and every offline stage runs over committed data
+(`lgb workload`, `lgb tune`, `lgb metrics`, `scripts/audit_docs.py`). What
+does not work: a real completion. That needs the one thing this repository
+cannot ship — an OpenAI-compatible `/v1` endpoint named by the environment
+variable `LGB_GATEWAY_BASE_URL` (default `http://127.0.0.1:8787/v1`, the only
+environment variable the stack reads for routing; `GSK_API_KEY` is sent as a
+bearer token when set). With no endpoint reachable, `/v1/chat/completions`
+returns HTTP 500 whose body names `LGB_GATEWAY_BASE_URL`.
+
+Every measured number in this README came from a private dev gateway reachable
+only from the author's machine: the pipeline is runnable and the committed
+parquet is inspectable by anyone, but the measurements themselves are not
+independently reproducible without an equivalent endpoint. This is a property
+of the measurements, not a caveat about them.
+
+Needs Python 3.11 and uv.
 
 ```
 git clone https://github.com/urrra39/llm-gateway-bench && cd llm-gateway-bench
 uv sync --frozen --extra embeddings
+
+# Point the stack at your own OpenAI-compatible endpoint. Omit both and the
+# server still starts; only /health will answer.
+export LGB_GATEWAY_BASE_URL=http://127.0.0.1:8787/v1  # must end in /v1
+export GSK_API_KEY=...                                # only if it needs a token
+
 .venv/bin/python -m lgb serve --port 8000
 ```
 
 Then, in a second terminal:
 
 ```
+# answers with no endpoint configured
 curl -s localhost:8000/health
 # {"ok": true, "cache_size": 0}
+
+# needs an endpoint
 curl -s localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model": "deepseek-v4-flash", "messages": [{"role": "user", "content": "Say hello in one sentence."}]}'
-# {"choices": [{"message": {"content": "...", ...}}], "x_gateway": {"mode": "router", "hit": false, ...}}
+# with an endpoint:
+#   {"choices": [{"message": {"content": "...", ...}}], "x_gateway": {"mode": "router", "hit": false, ...}}
+# without one, HTTP 500:
+#   {"error": {"message": "chat failed for deepseek-v4-flash: ConnectError: ... .
+#              No OpenAI-compatible endpoint answered at http://127.0.0.1:8787/v1.
+#              Set LGB_GATEWAY_BASE_URL to a reachable /v1 endpoint (and GSK_API_KEY
+#              if that endpoint needs a bearer token).",
+#     "type": "upstream_unavailable", "param": "LGB_GATEWAY_BASE_URL"}}
 ```
 
-One command reproduces the benchmark (about 45 minutes, resumable): `make all`.
+One command reproduces the benchmark (about 45 minutes, resumable): `make all`
+— against a working upstream only. Its `run-low`, `run-high` and `judge`
+stages call the model, so with no endpoint configured `make all` stops at the
+first `lgb run` and writes no results. The stages that need nothing beyond
+this clone are `make workload`, `make tune`, `make metrics` and `make audit`.
 
 Ceiling in own words: this benchmark cannot weigh production traffic. The
 workload is constructed from PAWS pairs with fixed duplicate fractions, both
@@ -342,16 +377,25 @@ Regenerate every figure from results.json in one command:
 
 ## Reproduction
 
-Requires Python 3.11, uv, and the dev gateway at http://127.0.0.1:8787/v1.
-No key is needed locally; GSK_API_KEY is read when set and sent as a bearer
-token (verified: keyless probes answered on 2026-09-17).
+Requires Python 3.11, uv, and an OpenAI-compatible endpoint at
+`LGB_GATEWAY_BASE_URL`. The measurements below came from a private dev gateway
+on the author's machine at `http://127.0.0.1:8787/v1`, which answered keyless
+(GSK_API_KEY is read when set and sent as a bearer token; verified keyless
+2026-09-17). That endpoint is not reachable from anywhere else, so the
+pipeline and the committed parquet reproduce for anyone but the measurements
+do not: a stranger substituting their own endpoint runs the same code against
+a different model and gets their own numbers, not these.
 
 ```
 uv sync --frozen --extra embeddings
+export LGB_GATEWAY_BASE_URL=http://127.0.0.1:8787/v1
 make all
 ```
 
-`make pilot` runs a 50-request sanity path on the low fraction. `make all`
+`make all` needs that endpoint for its `run-low`, `run-high` and `judge`
+stages and stops at the first `lgb run` without one.
+`make pilot` runs a 50-request sanity path on the low fraction and needs the
+endpoint too. `make all`
 rebuilds workloads, tunes the threshold on one half, runs all four configs on
 both fractions, judges, assembles results.json, and audits docs. All stages
 are resumable with atomic parquet checkpointing; a kill discards at most one in-flight row.
@@ -443,9 +487,12 @@ Expected: image builds (torch CPU wheel plus ~90 MB embedding weights
 download to data/models on first embed, needs network), `health` returns ok,
 and the chat endpoint answers as in Quickstart. Without GSK_API_KEY the
 container behaves like local runs: requests pass with no Authorization
-header, which the dev gateway accepts. Against a keyed upstream, requests
-fail with `RuntimeError: chat failed for deepseek-v4-flash: http ...` after
-3 attempts (HTTP 500 with that message; uvicorn logs the traceback). The
+header, which the dev gateway accepts. With nothing reachable at the
+configured upstream, or against a keyed upstream with no key set, chat
+returns HTTP 500 after 3 attempts with a JSON body that names the variable to
+set — `{"error": {"message": "chat failed for deepseek-v4-flash: ...", "type":
+"upstream_unavailable", "param": "LGB_GATEWAY_BASE_URL"}}` — and uvicorn logs
+the same message. The
 container reaches the upstream via LGB_GATEWAY_BASE_URL, default
 http://host.docker.internal:8787/v1 (Docker Desktop); on Linux set
 LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or use host networking.

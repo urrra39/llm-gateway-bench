@@ -9,10 +9,11 @@ services:
       - ./data/models:/app/data/models
     environment:
       # Optional. The dev gateway used here answers without a key; against a
-      # keyed upstream, requests fail with `RuntimeError: chat failed ...`.
+      # keyed upstream, requests 500 with a body naming GSK_API_KEY.
       - GSK_API_KEY=${GSK_API_KEY:-}
       # Inside the container the upstream gateway is not on container
       # localhost. Docker Desktop: host.docker.internal works. Linux: set
       # LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or run with
-      # network_mode: host.
+      # network_mode: host. With nothing reachable there, /health still
+      # answers and chat 500s with a body naming LGB_GATEWAY_BASE_URL.
       - LGB_GATEWAY_BASE_URL=${LGB_GATEWAY_BASE_URL:-http://host.docker.internal:8787/v1}

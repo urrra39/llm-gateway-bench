@@ -190,3 +190,23 @@ false. The GitHub description now leads with the measured finding
 (136 characters, set via API) instead of "model routing", which the one-model
 constraint contradicts; topics already covered llm, caching, routing,
 cost-optimization, benchmark and fastapi, so they stand.
+
+## 24. The Quickstart states the keyless boundary; upstream failure names its variable.
+
+Rationale: the old Quickstart read "no API key — the dev gateway answers
+keyless", true only on the author's machine, so a stranger followed three
+commands to a connection error. The Quickstart now splits keyless from
+endpoint-requiring before the commands (serve starts and /health answers,
+plus workload/tune/metrics/audit over committed parquet; a completion does
+not), shows LGB_GATEWAY_BASE_URL and GSK_API_KEY in the command block as read
+from src/lgb/config.py, and carries the private-gateway disclosure at the
+point the reproduction claim is made rather than only under Limitations.
+Gateway.chat now raises lgb.chat.UpstreamError carrying the variable name and
+distinguishes unreachable (transport), rejected credentials (401/403, no
+retry) and answered-without-a-completion; the API returns HTTP 500 with
+{"type": "upstream_unavailable", "param": "<variable>"} and logs the same
+message through uvicorn. The `chat failed for <model>` prefix is preserved
+because the CI probe and the README both quote it; CI now also asserts the
+variable name appears in both the body and the container log. `make all`
+cannot run without an upstream (run/judge call the model), stated beside the
+45-minute claim.
