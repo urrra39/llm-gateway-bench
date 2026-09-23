@@ -66,7 +66,9 @@ def test_audit_flags_a_doctored_ratio(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_audit_flags_a_doctored_percentage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     audit = _load_audit()
     readme = Path("README.md").read_text(encoding="utf-8")
-    doctored = readme.replace("0.0889 (4 of 45", "0.0999 (4 of 45", 1)
+    # The gate table states the same rate earlier in the file, so target the
+    # headline-table cell by its interval suffix.
+    doctored = readme.replace("0.0889 (4 of 45; 95% Wilson", "0.0999 (4 of 45; 95% Wilson", 1)
     assert doctored != readme
     target = tmp_path / "README.md"
     target.write_text(doctored, encoding="utf-8")
@@ -192,3 +194,53 @@ def test_audit_scans_documents_beyond_the_readme(
     monkeypatch.setattr(audit, "HUMAN_LABELING", target)
     errors: list[str] = audit.check_figures()
     assert any("HUMAN_LABELING.md" in e and "http" in e for e in errors)
+
+
+def test_every_gate_has_a_registered_bound() -> None:
+    """The falsifiability check passes on the shipped results.json."""
+    audit = _load_audit()
+    assert audit.check_gate_bounds(audit.load_results()) == []
+
+
+def test_audit_rejects_a_gate_with_no_bound(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The defect class: a gate asserting only that a number exists."""
+    audit = _load_audit()
+    data = audit.load_results()
+    gates = list(data["gates"])
+    gates.append({"name": "false_hit_rate_reported_low", "passed": True, "observed": "0.0889"})
+    data["gates"] = gates
+    errors: list[str] = audit.check_gate_bounds(data)
+    assert any("no registered bound" in e for e in errors)
+
+
+def test_audit_rejects_a_gate_verdict_the_bar_contradicts() -> None:
+    """Flipping the stored verdict must not survive recomputation."""
+    audit = _load_audit()
+    data = audit.load_results()
+    gates = [dict(g) for g in data["gates"]]
+    for gate in gates:
+        if gate["name"] == "false_hit_rate_within_bound_low":
+            gate["passed"] = True
+    data["gates"] = gates
+    errors: list[str] = audit.check_gate_bounds(data)
+    assert any("false_hit_rate_within_bound_low says True" in e for e in errors)
+
+
+def test_audit_requires_the_readme_to_restate_every_gate_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failing gate cannot be dropped from the front page."""
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    dropped = readme.replace(
+        "| false_hit_rate_within_bound_high | FAIL | "
+        "0.0941 (8 of 85 semantic hits) vs bar 0.0500 |\n",
+        "",
+        1,
+    )
+    assert dropped != readme
+    target = tmp_path / "README.md"
+    target.write_text(dropped, encoding="utf-8")
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_gate_bounds(audit.load_results())
+    assert any("false_hit_rate_within_bound_high" in e and "lacks the row" in e for e in errors)

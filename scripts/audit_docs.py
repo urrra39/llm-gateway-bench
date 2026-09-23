@@ -8,6 +8,8 @@ Checks:
 - No tracked document sources an image off this repository, no bare external
   URL stands where a figure name belongs, every referenced figure path exists,
   and no committed figure is orphaned.
+- Every gate carries a registered bound the data could have crossed, and the
+  README gate table restates every gate row verbatim.
 - docs/OPEN_DEFECTS.md matches the DEFECTS source list below, so the two
   cannot drift.
 
@@ -35,6 +37,34 @@ HUMAN_LABELING = REPO / "docs" / "HUMAN_LABELING.md"
 
 EXPECTED_CONFIGS = ("baseline", "cache", "router_cascade", "router_heuristic")
 EXPECTED_FRACS = ("low", "high")
+
+#: Every gate, with the bound it compares a measurement against. A gate that
+#: only asserts a number exists cannot be written down here, because there is
+#: no bound to write: that is the whole point of the registry. Both false-hit
+#: gates were exactly that until 2026-09-23, passing on any observation.
+#: check_gate_bounds fails on any gate absent from this table and on any entry
+#: here absent from results.json.
+GATE_BOUNDS: dict[str, str] = {
+    "baseline_costs_more_low_cache": "low cache cost_usd < low baseline cost_usd",
+    "baseline_costs_more_low_router_cascade": (
+        "low router_cascade cost_usd < low baseline cost_usd"
+    ),
+    "baseline_costs_more_low_router_heuristic": (
+        "low router_heuristic cost_usd < low baseline cost_usd"
+    ),
+    "false_hit_rate_within_bound_low": "low cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "baseline_costs_more_high_cache": "high cache cost_usd < high baseline cost_usd",
+    "baseline_costs_more_high_router_cascade": (
+        "high router_cascade cost_usd < high baseline cost_usd"
+    ),
+    "baseline_costs_more_high_router_heuristic": (
+        "high router_heuristic cost_usd < high baseline cost_usd"
+    ),
+    "false_hit_rate_within_bound_high": "high cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "tuned_threshold_beats_random_control": "tuning tuned_f1 > control_random_mean_f1",
+    "human_label_coverage": "filled human_label rows / total rows >= 0.50",
+    "judge_independence": "judge_primary != judge_secondary",
+}
 
 # Source list for docs/OPEN_DEFECTS.md. Edit here; the audit regenerates the
 # file so prose and list cannot drift.
@@ -535,6 +565,9 @@ def _known_percentages(data: dict[str, object]) -> list[float]:
     values.append(50.0)  # human gate threshold: 30 of 60 rows
     values.append(2.0)  # shippability bar for false hits; the sweep-minimum
     # guard below keeps it meaningful (it must stay below every sweep value)
+    from lgb.metrics import FALSE_HIT_RATE_BAR
+
+    values.append(FALSE_HIT_RATE_BAR * 100.0)  # the false-hit gate's bar
     return values
 
 
@@ -871,6 +904,84 @@ def check_gate_table(data: dict[str, object]) -> list[str]:
     return errors
 
 
+def check_gate_bounds(data: dict[str, object]) -> list[str]:
+    """No gate may be one the data could not have failed.
+
+    Falsifiability is not checkable from a boolean, so it is checked from a
+    registry: every gate name must appear in GATE_BOUNDS with the comparison
+    it makes. A gate that only asserts a number exists has no comparison to
+    register, so adding one fails here. The README must also restate every
+    gate row verbatim, status and observation included, so the front page
+    cannot quietly drop a failing gate.
+    """
+    errors: list[str] = []
+    gates = data.get("gates")
+    if not isinstance(gates, list):
+        return ["results.json has no gates list"]
+    readme = README.read_text(encoding="utf-8")
+    seen: list[str] = []
+    for gate in gates:
+        if not isinstance(gate, dict):
+            errors.append("gate entry is not an object")
+            continue
+        name = str(gate.get("name"))
+        seen.append(name)
+        if name not in GATE_BOUNDS:
+            errors.append(
+                f"gate {name} has no registered bound in GATE_BOUNDS; "
+                "a gate the data could not violate is not a gate"
+            )
+        if not isinstance(gate.get("passed"), bool):
+            errors.append(f"gate {name} has no boolean verdict")
+            continue
+        observed = str(gate.get("observed", "")).strip()
+        if not observed:
+            errors.append(f"gate {name} records no observation")
+            continue
+        status = "PASS" if gate.get("passed") else "FAIL"
+        row = f"| {name} | {status} | {observed} |"
+        if row not in readme:
+            errors.append(f"README gate table lacks the row {row!r}")
+    for name in GATE_BOUNDS:
+        if name not in seen:
+            errors.append(f"registered gate {name} is absent from results.json")
+    errors.extend(_recompute_false_hit_gates(data, gates))
+    return errors
+
+
+def _recompute_false_hit_gates(data: dict[str, object], gates: list[Any]) -> list[str]:
+    """Re-derive the false-hit verdict from the metrics block and the bar."""
+    from lgb.metrics import FALSE_HIT_RATE_BAR
+
+    errors: list[str] = []
+    metrics = data.get("metrics", {})
+    assert isinstance(metrics, dict)
+    by_name = {str(g.get("name")): g for g in gates if isinstance(g, dict)}
+    for frac in EXPECTED_FRACS:
+        gate = by_name.get(f"false_hit_rate_within_bound_{frac}")
+        entry = metrics.get(f"{frac}_cache", {})
+        if gate is None or not isinstance(entry, dict):
+            continue
+        rate = entry.get("false_hit_rate")
+        if not isinstance(rate, (int, float)):
+            errors.append(f"{frac}_cache has no false_hit_rate to gate on")
+            continue
+        want = float(rate) <= FALSE_HIT_RATE_BAR
+        if gate.get("passed") is not want:
+            errors.append(
+                f"false_hit_rate_within_bound_{frac} says {gate.get('passed')} but "
+                f"{rate} <= {FALSE_HIT_RATE_BAR} is {want}"
+            )
+        k = len(entry.get("false_hit_rows") or [])
+        n = entry.get("cache_semantic_hits")
+        if f"({k} of {n} semantic hits)" not in str(gate.get("observed", "")):
+            errors.append(
+                f"false_hit_rate_within_bound_{frac} observation does not state "
+                f"its recomputed counts ({k} of {n} semantic hits)"
+            )
+    return errors
+
+
 def check_cost_weighted_table(data: dict[str, object]) -> list[str]:
     """The README cost-weighted table matches a fresh argmin over the sweep."""
     errors: list[str] = []
@@ -941,6 +1052,7 @@ def main(argv: list[str] | None = None) -> int:
     errors.extend(check_ratios(data))
     errors.extend(check_comparisons(data))
     errors.extend(check_gate_table(data))
+    errors.extend(check_gate_bounds(data))
     errors.extend(check_cost_weighted_table(data))
     expected = render_open_defects()
     current = OPEN_DEFECTS.read_text(encoding="utf-8") if OPEN_DEFECTS.exists() else ""

@@ -25,6 +25,8 @@ Index:
 21. Two label-quality gates fail publicly; the gate line reads 9/11, not 7/9.
 22. Figures are embedded; Docker is verified by a CI job.
 23. No published number moved this round; the description names the finding.
+24. The Quickstart states the keyless boundary; upstream failure names its variable.
+25. The false-hit gates get a 5% bar and fail, rather than being deleted.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -167,6 +169,10 @@ stored); D5 now carries the exact fix and what it blocks.
 
 ## 21. Two label-quality gates fail publicly; the gate line reads 9/11, not 7/9.
 
+Superseded by #25: the gate line now reads 7/11 because two more gates were
+given a bound and both fail. The reasoning below still holds for the two
+label-quality gates.
+
 Rationale: human_label_coverage reads 0/60 = 0.000 against a 0.50 bar and
 judge_independence fails while both judges are deepseek-v4-flash, so
 all_gates_passed is false and the front page shows a full 11-row gate table.
@@ -210,3 +216,40 @@ because the CI probe and the README both quote it; CI now also asserts the
 variable name appears in both the body and the container log. `make all`
 cannot run without an upstream (run/judge call the model), stated beside the
 45-minute claim.
+
+## 25. The false-hit gates get a 5% bar and fail, rather than being deleted.
+
+Rationale: false_hit_rate_reported_low and false_hit_rate_reported_high
+asserted only that a false-hit rate existed. No observation could have
+failed them, so they inflated the pass count without testing anything. Two
+options were available: delete them and move the numbers into the results
+table as recorded observations, or give them a bound. The bound was chosen
+because it is the stronger option and because it agrees with the no-ship
+verdict the README already reaches: a semantic cache that serves one
+confidently wrong answer per twenty semantic hits is not shippable for
+correctness-sensitive traffic, and a false hit is worse than a miss in that
+the user gets no signal. The bar is 5%, defined once as FALSE_HIT_RATE_BAR in
+src/lgb/metrics.py and stated in the README as an engineering choice, not a
+measurement. Both gates now read FAIL at 0.0889 (4 of 45 semantic hits) and
+0.0941 (8 of 85 semantic hits), and the gates were renamed
+false_hit_rate_within_bound_{low,high} because the old names described
+reporting, not a bound.
+
+Re-auditing the remaining nine: six baseline_costs_more_* gates compare two
+measured costs and would fail if a cached or routed run cost at least as much
+as the baseline; tuned_threshold_beats_random_control compares tuned F1
+against the mean of 64 random thresholds and would fail on a tie;
+human_label_coverage compares filled rows against a 0.50 bar and does fail at
+0.000; judge_independence compares two model names and does fail. Every gate
+in the set now compares a measurement against a bound the data could have
+crossed. That property is machine-checked: scripts/audit_docs.py holds
+GATE_BOUNDS, one entry per gate naming its comparison, and fails on any gate
+absent from it — a gate with nothing to compare has no entry to write. The
+same check re-derives both false-hit verdicts from the metrics block and
+requires the README table to restate every gate row verbatim, so a failing
+gate cannot be dropped from the front page.
+
+No measured number moved. The results.json diff is six fields: two gate
+names, two observed strings, two passed booleans. The gate line moved from
+9/11 PASS, 2 FAIL to 7/11 PASS, 4 FAIL, and all_gates_passed was already
+false.

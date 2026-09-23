@@ -76,27 +76,41 @@ and quality is one judge pair from the same model with no human verification.
 Every cost number below is a function of the duplicate fractions, not a
 prediction about anyone's traffic. See docs/CEILING.md.
 
-Validity gates: all_gates_passed=false for run `full` (9/11 PASS, 2 FAIL, both label-quality gates). The two failures forbid any correctness claim about the quality column: no human has verified a label, and both judges are the same model.
+Validity gates: all_gates_passed=false for run `full` (7/11 PASS, 4 FAIL).
+Two failures forbid any correctness claim about the quality column: no human
+has verified a label, and both judges are the same model. Two more say the
+semantic cache is not shippable on this workload: its false-hit rate sits
+above the 5% bar on both duplicate fractions. Every gate below compares a
+measurement against a bound the data could have crossed, and the audit
+refuses any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
 
 | gate | status | observed |
 |---|---|---|
 | baseline_costs_more_low_cache | PASS | baseline 0.9226 vs cache 0.6139 |
 | baseline_costs_more_low_router_cascade | PASS | baseline 0.9226 vs router_cascade 0.5336 |
 | baseline_costs_more_low_router_heuristic | PASS | baseline 0.9226 vs router_heuristic 0.3282 |
-| false_hit_rate_reported_low | PASS | 0.0889 |
+| false_hit_rate_within_bound_low | FAIL | 0.0889 (4 of 45 semantic hits) vs bar 0.0500 |
 | baseline_costs_more_high_cache | PASS | baseline 0.9187 vs cache 0.3792 |
 | baseline_costs_more_high_router_cascade | PASS | baseline 0.9187 vs router_cascade 0.2294 |
 | baseline_costs_more_high_router_heuristic | PASS | baseline 0.9187 vs router_heuristic 0.2212 |
-| false_hit_rate_reported_high | PASS | 0.0941 |
+| false_hit_rate_within_bound_high | FAIL | 0.0941 (8 of 85 semantic hits) vs bar 0.0500 |
 | tuned_threshold_beats_random_control | PASS | tuned 0.79 f1 0.9007633587786259 vs control_mean 0.8279916296353538 max 0.9007633587786259 |
 | human_label_coverage | FAIL | 0/60 = 0.000 |
 | judge_independence | FAIL | primary deepseek-v4-flash == secondary deepseek-v4-flash; kappa 0.8034 (n=338) is self-consistency |
 
-No published number moved in this round: re-running the metrics assembly over
-the same committed parquet reproduces every existing results.json value
-exactly; the file only gained interval fields, two exact_only entries, two
-gates, and two analysis blocks, plus the all_gates_passed flip those gates
-entail.
+The 5% bar is a stated engineering choice, not a measurement: a semantic
+cache that serves one confidently wrong answer per twenty semantic hits is
+not shippable for correctness-sensitive traffic, and a false hit is worse
+than a miss because the user gets no signal that anything went wrong. It is
+defined once as `FALSE_HIT_RATE_BAR` in src/lgb/metrics.py.
+
+No measured number moved in this round. The only changes to results.json are
+the two false-hit gates: `false_hit_rate_reported_{low,high}` became
+`false_hit_rate_within_bound_{low,high}`, and both flipped PASS to FAIL
+because they now compare 0.0889 and 0.0941 against the 5% bar instead of
+merely asserting that a rate exists. The gate line moved 9/11 PASS, 2 FAIL to
+7/11 PASS, 4 FAIL. Every rate, interval and cost is byte-identical to the
+previous results.json.
 
 ## Findings
 

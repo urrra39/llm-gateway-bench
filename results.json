@@ -268,9 +268,9 @@
       "passed": true
     },
     {
-      "name": "false_hit_rate_reported_low",
-      "observed": "0.0889",
-      "passed": true
+      "name": "false_hit_rate_within_bound_low",
+      "observed": "0.0889 (4 of 45 semantic hits) vs bar 0.0500",
+      "passed": false
     },
     {
       "name": "baseline_costs_more_high_cache",
@@ -288,9 +288,9 @@
       "passed": true
     },
     {
-      "name": "false_hit_rate_reported_high",
-      "observed": "0.0941",
-      "passed": true
+      "name": "false_hit_rate_within_bound_high",
+      "observed": "0.0941 (8 of 85 semantic hits) vs bar 0.0500",
+      "passed": false
     },
     {
       "name": "tuned_threshold_beats_random_control",

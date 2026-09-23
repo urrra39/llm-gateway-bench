@@ -3,12 +3,17 @@
 Validity gates are code, not prose:
 - baseline must cost more than the cached and routed runs, or the measurement
   is broken;
-- the false-hit rate is reported and never folded into the hit rate;
+- the semantic-cache false-hit rate must sit at or below FALSE_HIT_RATE_BAR,
+  and never be folded into the hit rate;
 - the tuned threshold must beat the mean of 64 random thresholds drawn from
   the tuning grid, or the tuning did nothing;
 - human_label_coverage and judge_independence record the label-quality state
   honestly: both fail until a human verifies labels and the judges differ.
   A gate set that passes under zero human verification is not a gate set.
+
+Every gate compares a measured quantity against a bound the data could have
+crossed. A gate that only asserts a number exists is not a gate; the two
+false-hit gates were exactly that until they were given the bar below.
 """
 
 from __future__ import annotations
@@ -34,6 +39,17 @@ from lgb.intervals import (
 from lgb.judge import kappa_report
 from lgb.run import CONFIGS, run_dir
 from lgb.store import read_json, read_parquet, write_json
+
+#: Bar for a shippable semantic cache: at most one wrong answer served in
+#: twenty semantic hits. A false hit is not a miss — it returns a confidently
+#: wrong answer to a user with no signal that anything went wrong — so the bar
+#: is a correctness bar, not a cost bar. 5% is the number this repository
+#: publishes against; it is a stated engineering choice, not a measurement,
+#: and the measured rates (0.0889 low, 0.0941 high) are above it, so both
+#: gates fail and the failure agrees with the no-ship recommendation the
+#: README already reaches. Raising the bar past the measured rates would make
+#: the gates unfalsifiable again, which is the defect they had.
+FALSE_HIT_RATE_BAR = 0.05
 
 
 def _has_error(value: Any) -> bool:
@@ -313,6 +329,30 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
         },
     }
     return quality
+
+
+def false_hit_rate_gate(frac: str, cache_metric: dict[str, Any]) -> dict[str, Any]:
+    """Semantic-cache false hits must sit at or below FALSE_HIT_RATE_BAR.
+
+    This gate used to assert only that a false-hit rate existed, which no
+    observation could have violated. It now compares the measured rate
+    against a published bar, and on this workload it fails on both fractions.
+    A run that never reached the cache config fails too: an absent
+    measurement is not a satisfied bound.
+    """
+    name = f"false_hit_rate_within_bound_{frac}"
+    rate = cache_metric.get("false_hit_rate")
+    if not cache_metric.get("present") or not isinstance(rate, (int, float)):
+        return {"name": name, "passed": False, "observed": "cache run not present or unjudged"}
+    k = len(cache_metric.get("false_hit_rows") or [])
+    n = cache_metric.get("cache_semantic_hits")
+    return {
+        "name": name,
+        "passed": float(rate) <= FALSE_HIT_RATE_BAR,
+        "observed": (
+            f"{float(rate):.4f} ({k} of {n} semantic hits) vs bar {FALSE_HIT_RATE_BAR:.4f}"
+        ),
+    }
 
 
 def human_label_coverage(cfg: Config) -> dict[str, Any]:
@@ -620,13 +660,7 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
                 }
             )
         cm = metrics[f"{frac}_cache"]
-        gates.append(
-            {
-                "name": f"false_hit_rate_reported_{frac}",
-                "passed": bool(cm.get("present")) and cm.get("false_hit_rate") is not None,
-                "observed": str(cm.get("false_hit_rate")),
-            }
-        )
+        gates.append(false_hit_rate_gate(frac, cm))
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}
     # Strictly greater: an equal F1 means the tuning picked a point no better
     # than a random threshold, which is a published failure, not a pass.
