@@ -186,7 +186,7 @@ low duplicate fraction (report half: 245 attempted; successful: baseline 237, ca
 | cache | cache + long | 0.6139 (95% boot 0.5126-0.7216) | 2505.1 (95% boot 2310.9-2631.5) | 10620.2 (95% boot 8478.9-13647.5) | 18942.7 (95% boot 13005.2-33566.0) | 0.2899 (69 of 238; 95% Wilson 0.2360-0.3505) | 0.0889 (4 of 45; 95% Wilson 0.0351-0.2073) | 0.9308 (n=224; 95% boot 0.9040-0.9554) |
 | router_cascade | cache + short, escalate to long | 0.5336 (95% boot 0.3774-0.7204) | 1802.9 (95% boot 1657.2-1885.0) | 17513.6 (95% boot 8226.6-21257.7) | 37085.7 (95% boot 20163.1-68368.3) | 0.2815 (67 of 238; 95% Wilson 0.2282-0.3418) | 0.1364 (6 of 44; 95% Wilson 0.0640-0.2671) | 0.8678 (n=227; 95% boot 0.8326-0.9009) |
 | router_heuristic | cache + short/long by heuristic | 0.3282 (95% boot 0.2794-0.3806) | 1772.6 (95% boot 1680.5-1856.5) | 9637.9 (95% boot 9021.5-10538.9) | 10972.3 (95% boot 10435.3-16598.5) | 0.2743 (65 of 237; 95% Wilson 0.2214-0.3343) | 0.1463 (6 of 41; 95% Wilson 0.0688-0.2844) | 0.8348 (n=233; 95% boot 0.7940-0.8734) |
-| exact_only | exact only (replay) | 0.8049 (95% boot 0.6916-0.9251) | 2765.2 (95% boot 2523.8-3046.1) | 11407.4 (95% boot 9768.3-14544.1) | 18934.1 (95% boot 13728.6-29850.4) | 0.1097 (26 of 237; 95% Wilson 0.0760-0.1559) | n/a (1 of 24 judged exact hits scored 0) | unmeasured (see note) |
+| exact_only | exact only (replay) | 0.8049 (95% boot 0.6916-0.9251) | 2765.2 (95% boot 2523.8-3046.1) | 11407.4 (95% boot 9768.3-14544.1) | 18934.1 (95% boot 13728.6-29850.4) | 0.1097 (26 of 237; 95% Wilson 0.0760-0.1559) | n/a (cache run's exact hits: 1 of 24 judged scored 0) | unmeasured (see note) |
 
 high duplicate fraction (report half: 249 attempted; successful: baseline 246, cache 246, cascade 246, heuristic 246, exact_only 246):
 
@@ -196,7 +196,7 @@ high duplicate fraction (report half: 249 attempted; successful: baseline 246, c
 | cache | cache + long | 0.3792 (95% boot 0.2554-0.5326) | 7.0 (95% boot 6.3-8.3) | 7825.5 (95% boot 4960.6-13023.0) | 31169.6 (95% boot 11968.7-49186.1) | 0.6423 (158 of 246; 95% Wilson 0.5806-0.6996) | 0.0941 (8 of 85; 95% Wilson 0.0485-0.1749) | 0.9085 (n=235; 95% boot 0.8766-0.9362) |
 | router_cascade | cache + short, escalate to long | 0.2294 (95% boot 0.1372-0.3437) | 7.3 (95% boot 6.6-8.2) | 5751.3 (95% boot 3306.3-8629.6) | 24450.2 (95% boot 8618.0-29737.2) | 0.6463 (159 of 246; 95% Wilson 0.5848-0.7034) | 0.0698 (6 of 86; 95% Wilson 0.0324-0.1440) | 0.8619 (n=239; 95% boot 0.8285-0.8933) |
 | router_heuristic | cache + short/long by heuristic | 0.2212 (95% boot 0.1618-0.2947) | 10.0 (95% boot 8.6-10.9) | 9084.1 (95% boot 6594.7-9581.8) | 10517.9 (95% boot 9310.4-16744.0) | 0.6057 (149 of 246; 95% Wilson 0.5434-0.6647) | 0.125 (10 of 80; 95% Wilson 0.0693-0.2150) | 0.8264 (n=242; 95% boot 0.7872-0.8636) |
-| exact_only | exact only (replay) | 0.6245 (95% boot 0.5137-0.7465) | 2628.0 (95% boot 2422.5-2871.3) | 10388.2 (95% boot 8428.7-12483.4) | 25386.5 (95% boot 12483.4-41179.4) | 0.2967 (73 of 246; 95% Wilson 0.2431-0.3566) | n/a (0 of 71 judged exact hits scored 0; 2 unjudged) | unmeasured (see note) |
+| exact_only | exact only (replay) | 0.6245 (95% boot 0.5137-0.7465) | 2628.0 (95% boot 2422.5-2871.3) | 10388.2 (95% boot 8428.7-12483.4) | 25386.5 (95% boot 12483.4-41179.4) | 0.2967 (73 of 246; 95% Wilson 0.2431-0.3566) | n/a (cache run's exact hits: 0 of 71 judged scored 0; 2 unjudged) | unmeasured (see note) |
 
 Quality equiv is mean judge score divided by 2, where 2 is equivalent to the
 baseline, 1 is partial, 0 is wrong. False hits are semantic-cache hits the
@@ -331,13 +331,30 @@ No threshold reaches 2% false hits; at 0.995 the rate is still 6.45% with
 recall destroyed. `docs/figures/threshold_tradeoff.svg` plots all three
 curves with the chosen point marked. Revised recommendation: do not ship the
 semantic cache for correctness-sensitive traffic on this workload. Ship the
-exact-match cache — a verbatim repeat served from store — which covers 24 of
-69 hits (34.8%), which is 24 of 245 attempted requests (9.8%), on low
-duplicates, and 73 of 158 hits (46.2%), which is 73 of 249 attempted requests
-(29.3%), on high duplicates; plus short-recipe routing wherever one-sentence
-answers are acceptable. Exact hits are wrong only when the stored answer was
-wrong: 1 of 24 judged exact hits scored 0 on low duplicates, 0 of 71 on high
-(2 unjudged), so exact-match is near-error-free but not error-free. Quality
+exact-match cache — a verbatim repeat served from store — plus short-recipe
+routing wherever one-sentence answers are acceptable.
+
+Two exact-hit counts appear in this README and they count two things.
+*Observed in the cache run*: the live cache answered 24 of 69 hits (34.8%)
+from its exact tier on low duplicates, which is 24 of 245 attempted requests
+(9.8%), and 73 of 158 hits (46.2%) on high, which is 73 of 249 attempted
+requests (29.3%). *Available under exact-only replay*: with the semantic tier
+switched off, the `exact_only` row above reaches 26 of 237 successful replay
+rows (11.0%) on low and 73 of 246 (29.7%) on high. On low the two counts read
+24 and 26 because a semantic hit is answered from store but never added to it.
+Requests 438, 464 and 482 carry identical text, and in the cache run all three
+were answered semantically at similarity 0.9966 against stored anchor idx 148,
+so their own text never became an exact key. The replay has no semantic tier,
+so request 438 is a model call whose text is stored, and 464 and 482 then
+match it verbatim: 26 is 24 plus those two rows. Replaying the exact tier over
+the cache run's own rows also reaches 26, so the two counts are not an
+artifact of which rows errored in which run. On high duplicates no anchor is
+absorbed this way and both counts read 73.
+
+Exact hits are wrong only when the stored answer was wrong: 1 of 24 judged
+exact hits scored 0 on low duplicates, 0 of 71 on high (2 unjudged), so
+exact-match is near-error-free but not error-free. Those verdicts belong to
+the cache run's own 24 exact hits; no judge scored the replay's 26. Quality
 equiv for the replay is unmeasured — judging its stored texts would need new
 judge calls — with the cache run's exact-hit verdicts (21 scored 2, 2 scored
 1, 1 scored 0 on low; 68 scored 2, 3 scored 1 on high) as the closest observed

@@ -10,6 +10,8 @@ Checks:
   and no committed figure is orphaned.
 - Every gate carries a registered bound the data could have crossed, and the
   README gate table restates every gate row verbatim.
+- Both exact-hit counts are recomputed from the parquet store, each is stated
+  against its own denominator, and neither may be stated against the other's.
 - docs/OPEN_DEFECTS.md matches the DEFECTS source list below, so the two
   cannot drift.
 
@@ -982,6 +984,132 @@ def _recompute_false_hit_gates(data: dict[str, object], gates: list[Any]) -> lis
     return errors
 
 
+#: The two exact-hit quantities this repository publishes, each with the
+#: denominators it may be stated against. They are not the same number on the
+#: low fraction and prose must not write them as if they were: `observed` is
+#: what the live cache served from its exact tier, `available` is what an
+#: exact-only replay of the same request sequence reaches with the semantic
+#: tier switched off. A semantic hit is answered from store but never added to
+#: it, so a text the cache answered semantically never becomes an exact key
+#: and its verbatim repeats cannot be exact hits — which is why the two counts
+#: are 24 and 26 on low. The README stated them as if one of them explained
+#: the other until 2026-09-24.
+EXACT_HIT_QUANTITIES: dict[str, tuple[str, ...]] = {
+    "observed": ("hits", "attempted"),
+    "available": ("replay_rows",),
+}
+
+
+def _exact_hit_facts(frac: str) -> dict[str, Any]:
+    """Exact-hit counts and their denominators, recomputed from parquet.
+
+    observed/hits/attempted come from the cache run's own rows; available and
+    replay_rows come from the exact-only replay over the baseline's rows.
+    replay_over_cache_rows replays the exact tier over the cache run's rows
+    instead, so a surplus cannot be attributed to the two runs erroring on
+    different requests; absorbed names the surplus rows by idx.
+    """
+    from lgb.cache import normalize_exact
+    from lgb.config import Config
+    from lgb.metrics import _has_error, exact_only_metrics
+    from lgb.run import run_dir
+    from lgb.store import read_parquet
+
+    cfg = Config.load(REPO / "config" / "bench.yaml")
+    frame = read_parquet(run_dir(cfg, "cache", frac) / "outcomes.parquet")
+    if frame is None:
+        raise SystemExit(f"missing cache outcomes.parquet for {frac}")
+    ok = frame[frame["error"].isna()]
+    observed = sorted(int(i) for i in ok.loc[ok["kind"] == "cache_exact", "idx"])
+    stored: set[str] = set()
+    replayed: list[int] = []
+    for row in frame.sort_values("idx").itertuples(index=False):
+        if _has_error(row.error) or not str(row.answer_text).strip():
+            continue
+        key = normalize_exact(str(row.request))
+        if key in stored:
+            replayed.append(int(row.idx))
+        else:
+            stored.add(key)
+    replay = exact_only_metrics(cfg, frac)
+    return {
+        "observed": len(observed),
+        "hits": len(observed) + int((ok["kind"] == "cache_semantic").sum()),
+        "attempted": len(frame),
+        "available": int(replay["cache_exact_hits"]),
+        "replay_rows": int(replay["n_rows"]),
+        "replay_over_cache_rows": len(replayed),
+        "absorbed": sorted(set(replayed) - set(observed)),
+    }
+
+
+def check_exact_hit_counts(data: dict[str, object]) -> list[str]:
+    """Two exact-hit counts, two denominators, both recomputed from parquet.
+
+    The shipping sentence said 24 exact hits and the exact_only table row said
+    26, with nothing in the prose naming what either counted and a decision
+    entry giving a cause that was not the cause. Both counts and all three
+    denominators are re-derived here from data/runs/*/outcomes.parquet. Each
+    count must appear in the README against its own denominator, neither may
+    appear against the other's, and where they differ the README must write
+    the arithmetic that joins them and name the surplus rows by idx. Two
+    claims describing the same quantity therefore cannot disagree in prose
+    without failing the audit.
+    """
+    errors: list[str] = []
+    flat = re.sub(r"\s+", " ", README.read_text(encoding="utf-8"))
+    metrics = data.get("metrics")
+    assert isinstance(metrics, dict)
+    for frac in EXPECTED_FRACS:
+        facts = _exact_hit_facts(frac)
+        for key, quantity in (("cache", "observed"), ("exact_only", "available")):
+            entry = metrics.get(f"{frac}_{key}")
+            stored = entry.get("cache_exact_hits") if isinstance(entry, dict) else None
+            if stored != facts[quantity]:
+                errors.append(
+                    f"results.json {frac}_{key} cache_exact_hits {stored} != "
+                    f"{facts[quantity]} recomputed from parquet"
+                )
+        if facts["replay_over_cache_rows"] != facts["available"]:
+            errors.append(
+                f"{frac} exact-only replay reaches {facts['available']} over the baseline's "
+                f"rows but {facts['replay_over_cache_rows']} over the cache run's rows, so "
+                "the published cause (semantic absorption, not error sets) no longer holds"
+            )
+        for quantity, denominators in EXACT_HIT_QUANTITIES.items():
+            for denominator in denominators:
+                phrase = f"{facts[quantity]} of {facts[denominator]}"
+                if phrase not in flat:
+                    errors.append(
+                        f"README does not state the {frac} {quantity} exact-hit count "
+                        f"against its own denominator ({phrase})"
+                    )
+        if facts["observed"] == facts["available"]:
+            continue
+        for quantity, denominators in EXACT_HIT_QUANTITIES.items():
+            other = "available" if quantity == "observed" else "observed"
+            for denominator in denominators:
+                wrong = f"{facts[other]} of {facts[denominator]}"
+                if wrong in flat:
+                    errors.append(
+                        f"README states '{wrong}', which attaches the {frac} {other} "
+                        f"exact-hit count to the {quantity} denominator"
+                    )
+        bridge = f"{facts['available']} is {facts['observed']} plus"
+        if bridge not in flat:
+            errors.append(
+                f"README does not reconcile the two {frac} exact-hit counts: expected "
+                f"'{bridge}' and the {len(facts['absorbed'])} surplus rows"
+            )
+        for idx in facts["absorbed"]:
+            if str(idx) not in flat:
+                errors.append(
+                    f"README does not name {frac} request {idx}, one of the rows the "
+                    "exact-only replay serves and the cache run did not"
+                )
+    return errors
+
+
 def check_cost_weighted_table(data: dict[str, object]) -> list[str]:
     """The README cost-weighted table matches a fresh argmin over the sweep."""
     errors: list[str] = []
@@ -1053,6 +1181,7 @@ def main(argv: list[str] | None = None) -> int:
     errors.extend(check_comparisons(data))
     errors.extend(check_gate_table(data))
     errors.extend(check_gate_bounds(data))
+    errors.extend(check_exact_hit_counts(data))
     errors.extend(check_cost_weighted_table(data))
     expected = render_open_defects()
     current = OPEN_DEFECTS.read_text(encoding="utf-8") if OPEN_DEFECTS.exists() else ""

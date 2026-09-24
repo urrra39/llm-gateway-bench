@@ -54,7 +54,7 @@ def test_audit_flags_a_doctored_ratio(tmp_path: Path, monkeypatch: pytest.Monkey
     """One wrong digit in '24 of 69' must fail the arithmetic check."""
     audit = _load_audit()
     readme = Path("README.md").read_text(encoding="utf-8")
-    doctored = readme.replace("24 of\n69 hits (34.8%)", "24 of\n70 hits (34.8%)", 1)
+    doctored = readme.replace("24 of 69 hits (34.8%)", "24 of 70 hits (34.8%)", 1)
     assert doctored != readme
     target = tmp_path / "README.md"
     target.write_text(doctored, encoding="utf-8")
@@ -244,3 +244,41 @@ def test_audit_requires_the_readme_to_restate_every_gate_row(
     monkeypatch.setattr(audit, "README", target)
     errors: list[str] = audit.check_gate_bounds(audit.load_results())
     assert any("false_hit_rate_within_bound_high" in e and "lacks the row" in e for e in errors)
+
+
+def test_exact_hit_counts_agree_with_parquet() -> None:
+    """Both exact-hit counts, recomputed from outcomes.parquet, as shipped."""
+    audit = _load_audit()
+    assert audit.check_exact_hit_counts(audit.load_results()) == []
+
+
+def test_audit_rejects_conflating_the_two_exact_hit_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """24 exact hits and 26 exact hits are different quantities.
+
+    Stating the cache run's count against the replay's denominator is the
+    defect: it reads as one number explaining the other.
+    """
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    target = tmp_path / "README.md"
+    target.write_text(readme + "\nThe replay serves 24 of 237 rows.\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_exact_hit_counts(audit.load_results())
+    assert any("24 of 237" in e and "attaches" in e for e in errors)
+
+
+def test_audit_requires_the_exact_hit_reconciliation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the two counts differ, the README must write the arithmetic."""
+    audit = _load_audit()
+    readme = Path("README.md").read_text(encoding="utf-8")
+    doctored = readme.replace("26 is 24 plus", "26 is 25 plus", 1)
+    assert doctored != readme
+    target = tmp_path / "README.md"
+    target.write_text(doctored, encoding="utf-8")
+    monkeypatch.setattr(audit, "README", target)
+    errors: list[str] = audit.check_exact_hit_counts(audit.load_results())
+    assert any("does not reconcile" in e for e in errors)

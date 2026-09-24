@@ -143,12 +143,19 @@ fails unregistered comparative sentences.
 
 Rationale: exact matching is order-deterministic, so replaying the baseline's
 stored rows reproduces the config without model calls (26 low and 73 high
-exact hits; replay mirrors the baseline error set, hence 26 vs the cache run's
-24 on low). Quality cannot be judged without judge calls — temperature-0
-repeats still differ, so the replay serves texts no judge scored — and is
-reported unmeasured, with the cache run's exact-hit verdicts as an explicit
-proxy (1 of 24 scored 0 on low, 0 of 71 on high with 2 unjudged, which also
-retires the "zero added error" claim).
+exact hits). Those 26 are not the cache run's 24 renamed. A semantic hit is
+answered from store but never added to it, so when the cache answered requests
+438, 464 and 482 semantically at similarity 0.9966 against anchor idx 148,
+their own text never became an exact key, while the tier-free replay stores
+438 and matches 464 and 482 verbatim: 26 is 24 plus those two rows. Replaying
+the exact tier over the cache run's own rows also yields 26, so the error sets
+are not the cause. This entry previously read "replay mirrors the baseline
+error set, hence 26 vs the cache run's 24 on low", which was wrong; the
+explanation is corrected above and no count moved. Quality cannot be judged
+without judge calls — temperature-0 repeats still differ, so the replay serves
+texts no judge scored — and is reported unmeasured, with the cache run's
+exact-hit verdicts as an explicit proxy (1 of 24 scored 0 on low, 0 of 71 on
+high with 2 unjudged, which also retires the "zero added error" claim).
 
 ## 19. Cost-weighted loss picks the grid edge from r=10 up; recall saturation is measured.
 
