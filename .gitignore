@@ -13,6 +13,7 @@ htmlcov/
 *.tmp
 *.log
 .DS_Store
+.metadata_never_index
 
 # downloaded corpora and model files are regenerable and large
 data/raw/
