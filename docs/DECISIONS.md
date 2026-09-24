@@ -301,27 +301,31 @@ What this does and does not buy. On any host that keeps an image store
 between builds, the dependency layer is now reused across every prose commit.
 A GitHub-hosted runner is ephemeral and keeps nothing, so it rebuilds from
 scratch every time — and the measurement is that rebuilding from scratch is
-cheap. Run 36, the first run under this configuration, reports zero cached
-layers and a docker job of **1m32s**: 5.1s of apt and pip, 33.9s installing
-71 packages including the torch CPU wheel, 1.1s installing the project,
-29.1s exporting layers, 1m18s of Build inside a 1m32s job. Against 21m25s in
-run 35, the caching machinery was about 93% of the job it was meant to
-shorten. The brief asked for warm builds in single-digit minutes; a fresh
-GitHub runner has no warm build to have, and what it has instead is a cold
-build of one and a half minutes, every time.
+cheap. Runs 36 and 37, the first two under this configuration, both report
+zero cached layers and docker jobs of **1m32s and 2m59s**. Run 36: 5.1s of
+apt and pip, 33.9s installing 71 packages including the torch CPU wheel, 1.1s
+installing the project, 29.1s exporting layers, 1m18s of Build inside a 1m32s
+job. Run 37 did identical work on a slower runner: 5.8s, 76.1s, 1.1s, 75.1s,
+2m45s of Build inside a 2m59s job. The spread is runner speed, not caching —
+neither run restored a layer. Against 21m25s in run 35, the caching machinery
+was 86 to 93% of the job it was meant to shorten. The brief asked for warm
+builds in single-digit minutes; a fresh GitHub runner has no warm build to
+have, and what it has instead is a cold build of one and a half to three
+minutes, every time.
 
 Kept on every push rather than gated on paths. A `paths:` filter plus a
 scheduled full run would leave the ci badge green on a commit where docker
 never executed, and the badge cannot say which of those two things it means.
 Freshness that cannot be guaranteed is worse than a minute of runner time,
-so the job runs on every push to main and on every pull request. At 1m32s
-this is no longer a trade worth revisiting.
+so the job runs on every push to main and on every pull request. At under
+three minutes this is no longer a trade worth revisiting.
 
-`timeout-minutes` moved 35 to 15 once run 36 measured the new cold build.
-Fifteen minutes is eleven times 1m18s; the old ceiling was sized for the
-export path that no longer exists, whose worst observed Build was 20m44s. A
-ceiling exists to make a hung build fail as a build rather than as a mystery,
-and eleven times the measured worst case still does that.
+`timeout-minutes` moved 35 to 15 once runs 36 and 37 measured the new cold
+build. Fifteen minutes is five times the slower of the two Build steps
+(2m45s); the old ceiling was sized for the export path that no longer
+exists, whose worst observed Build was 20m44s. A ceiling exists to make a
+hung build fail as a build rather than as a mystery, and five times the
+measured worst case still does that.
 
 No published measurement of the benchmark changed; the numbers in this entry
 are CI durations read from the Actions API and from the runs' build logs.

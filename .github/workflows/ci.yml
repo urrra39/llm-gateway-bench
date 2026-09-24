@@ -63,11 +63,12 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    # Eleven times the cold build now measured (1m18s of Build in run 36, no
-    # cached layers). The previous ceiling of 35 minutes was sized for the
-    # buildx export path removed below, whose worst observed Build was
-    # 20m44s; that configuration no longer exists. The point of the ceiling
-    # is that a hung build fails as a build, not as a mystery.
+    # Five times the slower of the two cold builds now measured (1m18s of
+    # Build in run 36, 2m45s in run 37; neither restored a layer). The
+    # previous ceiling of 35 minutes was sized for the buildx export path
+    # removed below, whose worst observed Build was 20m44s; that
+    # configuration no longer exists. The point of the ceiling is that a hung
+    # build fails as a build, not as a mystery.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -81,10 +82,11 @@ jobs:
       # 650.7s uploading layers to save a 72.1s `uv sync` that the old COPY
       # order invalidated on every README edit anyway, so the only layers it
       # ever restored were WORKDIR and apt-get. Measured effect: run 33 took
-      # 16m41s, run 35 took 21m25s, run 36 under this configuration took
-      # 1m32s with zero cached layers. The Dockerfile's dependency layer is
-      # now keyed on uv.lock alone, so a host that keeps an image store
-      # reuses it; an ephemeral runner rebuilds it in 33.9s.
+      # 16m41s, run 35 took 21m25s, runs 36 and 37 under this configuration
+      # took 1m32s and 2m59s with zero cached layers. The Dockerfile's
+      # dependency layer is now keyed on uv.lock alone, so a host that keeps
+      # an image store reuses it; an ephemeral runner rebuilds it in 34 to
+      # 76 seconds.
       - name: Build
         run: docker build -t llm-gateway-bench:ci .
       - name: Start gateway

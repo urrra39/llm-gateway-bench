@@ -553,10 +553,10 @@ human label, and a test fails if data/human_validation.csv ever contains one.
 ## Serving with Docker (verified in CI, not locally: this machine has no Docker)
 
 Container path verified by the `docker` job in
-https://github.com/urrra39/llm-gateway-bench/actions/runs/35994722531
-(image builds in 1m18s from a cold daemon, `/health` returns ok, a keyless
-chat request 500s with a body naming `LGB_GATEWAY_BASE_URL` and `chat failed`
-in the container logs, container torn down).
+https://github.com/urrra39/llm-gateway-bench/actions/runs/35996872882
+(image builds cold in 2m45s, `/health` returns ok, a keyless chat request
+500s with a body naming `LGB_GATEWAY_BASE_URL` and `chat failed` in the
+container logs, container torn down).
 
 ```
 docker compose up --build
@@ -582,8 +582,9 @@ host networking.
 Build cost in CI. The job had layer caching and the caching was the expense.
 Durations read from the Actions API: run 33, writing a cold GitHub Actions
 cache, took 16m41s of docker; run 35, reading that cache warm, took 21m25s,
-of which the Build step was 20m44s; run 36, with no caching machinery at all,
-took **1m32s** and cached nothing. Run 35's log restored exactly two layers
+of which the Build step was 20m44s; runs 36 and 37, with no caching machinery
+at all, took **1m32s and 2m59s** and cached nothing. Run 35's log restored
+exactly two layers
 (WORKDIR, and the apt-get plus pip line) and never once restored the 72.1s
 `uv sync`, because `COPY pyproject.toml uv.lock README.md Makefile ./` sat
 above it and README.md changes on nearly every commit here. Against that
@@ -593,12 +594,13 @@ spent 511.4s exporting the 6.34 GB image to a tarball and 150.1s importing it
 back for `load: true`. The Dockerfile now keys its dependency layer on
 `uv.lock` alone and copies README.md, src/ and the workload sample afterwards,
 and the workflow runs a plain `docker build` on the default driver with no
-buildx and no cache export. Run 36's whole build, from a cold daemon: 5.1s of
-apt and pip, 33.9s installing 71 packages including the torch CPU wheel, 1.1s
-installing the project, 29.1s exporting layers. `timeout-minutes` is 15,
-eleven times that build, and the job stays on every push rather than behind a
-`paths:` filter, so the ci badge always reflects a docker verification of the
-commit it sits on.
+buildx and no cache export. Neither run restored a single layer, so both are
+cold builds: run 36 spent 5.1s on apt and pip, 33.9s installing 71 packages
+including the torch CPU wheel, 1.1s installing the project and 29.1s
+exporting layers; run 37 spent 5.8s, 76.1s, 1.1s and 75.1s on the same four
+steps. `timeout-minutes` is 15, about five times run 37's 2m45s Build step,
+and the job stays on every push rather than behind a `paths:` filter, so the
+ci badge always reflects a docker verification of the commit it sits on.
 
 ## Limitations
 
