@@ -112,6 +112,36 @@ merely asserting that a rate exists. The gate line moved 9/11 PASS, 2 FAIL to
 7/11 PASS, 4 FAIL. Every rate, interval and cost is byte-identical to the
 previous results.json.
 
+## The one remaining human step
+
+> **One human task is outstanding and nothing in this repository can do it.**
+>
+> - **File:** `data/human_validation.csv` — 60 rows, `human_label` empty on
+>   every one of them.
+> - **Command:** `.venv/bin/python -m lgb human-agreement --csv
+>   data/human_validation.csv`
+> - **Rows:** 60. The 34 semantic hits the judge scored 0 come first, then the
+>   19 rows the two judge passes scored differently, then 7 cascade
+>   escalations. It runs on a partly filled file, so 10 rows gives a kappa
+>   over 10 rows.
+> - **Effort: about 2 to 3 hours. That is an estimate, not a measurement** —
+>   no row has been labelled, so there is no observed rate. Its basis is 7,406
+>   words of request and answer text across the 60 rows.
+> - **Protocol:** docs/HUMAN_LABELING.md, which defines the 2/1/0 scale and
+>   the ten deciding rules precisely enough for two people to label a row
+>   identically.
+>
+> Doing it closes `human_label_coverage` at 30 labelled rows. It does not
+> close `judge_independence`, and that gate cannot close under the one-model
+> constraint: both judge passes are deepseek-v4-flash, so the reported kappa
+> of 0.8034 (n=338) is judge self-consistency and not judge accuracy. Exactly
+> two conditions would close it — a second model family becoming reachable
+> from the gateway, so two independent judges can be compared; or a
+> human-labelled subset large enough to score the judge against, at which
+> point the human labels are the reference and the judge is the measurement.
+> All 60 rows labelled is a start on the second and is not on its own large
+> enough to replace a second judge.
+
 ## Findings
 
 1. The cache exchanges measured cost for measured quality. Cache-plus-long
@@ -488,25 +518,45 @@ Judge rubric is frozen in config/bench.yaml. Per-row verdicts persist under
 data/runs/*/judge.parquet. Judge self-consistency is κ 0.8034 with n=338
 (observed 0.9408, expected 0.6991): the same model judging twice, not
 inter-family agreement. No human has verified any label.
-data/human_validation.csv ships the 60 highest-value rows with an empty
-human_label column, ordered false hits first, then judge disagreements, then
-escalations (see `priority` in src/lgb/humanval.py). Fill it and run the exact
-command below to compute judge-versus-human agreement with kappa plus its
-denominator; rows with an empty human_label are skipped, so a partially
-filled file already reports:
+
+data/human_validation.csv ships 60 rows with an empty human_label column,
+ordered by a `priority` tier written into the file itself: 34 semantic hits
+the judge scored 0, then 19 rows the two judge passes scored differently, then
+7 of the 26 judged cascade escalations, the remaining 1370 judged rows being
+tier 4 and out of a 60-row budget. docs/HUMAN_LABELING.md defines the scale
+and the deciding rules. `python -m lgb export-human` regenerates the file
+byte-identically from the run store.
+
+That ordering is a correction, not a description of what shipped before. Until
+2026-09-24 the file held 60 cache_exact rows from the high-duplicate cache run,
+every one scored 2 or 1 — the least informative set the store can produce —
+under this same sentence claiming false hits came first. The sort key tested
+`isinstance(score, int)` while the exporter wrote the scores as strings, so no
+row ever matched the false-hit or the disagreement test and the sort fell
+through to alphabetical dup_type. No published number moved: the file was
+never labelled, so human_label_coverage was 0/60 before the change and is
+0/60 after it.
+
+Fill it and run the exact command below to compute judge-versus-human
+agreement with observed agreement, expected agreement, kappa and the
+denominator. Rows with an empty human_label are dropped from that
+denominator, so a partly filled file already reports:
 
 ```
 .venv/bin/python -m lgb human-agreement --csv data/human_validation.csv
 ```
 
-Unverified labels are written as unverified.
+With no labels present it reports n=0 and no statistics, which is the current
+state: agreement is unmeasured, not zero. Nothing in this repository writes a
+human label, and a test fails if data/human_validation.csv ever contains one.
 
 ## Serving with Docker (verified in CI, not locally: this machine has no Docker)
 
 Container path verified by the `docker` job in
-https://github.com/urrra39/llm-gateway-bench/actions/runs/35343182976
-(image builds, `/health` returns ok, a keyless chat request 500s with `chat
-failed` in the container logs, container torn down).
+https://github.com/urrra39/llm-gateway-bench/actions/runs/35994722531
+(image builds in 1m18s from a cold daemon, `/health` returns ok, a keyless
+chat request 500s with a body naming `LGB_GATEWAY_BASE_URL` and `chat failed`
+in the container logs, container torn down).
 
 ```
 docker compose up --build
@@ -532,7 +582,8 @@ host networking.
 Build cost in CI. The job had layer caching and the caching was the expense.
 Durations read from the Actions API: run 33, writing a cold GitHub Actions
 cache, took 16m41s of docker; run 35, reading that cache warm, took 21m25s,
-of which the Build step was 20m44s. Run 35's log restored exactly two layers
+of which the Build step was 20m44s; run 36, with no caching machinery at all,
+took **1m32s** and cached nothing. Run 35's log restored exactly two layers
 (WORKDIR, and the apt-get plus pip line) and never once restored the 72.1s
 `uv sync`, because `COPY pyproject.toml uv.lock README.md Makefile ./` sat
 above it and README.md changes on nearly every commit here. Against that
@@ -542,13 +593,12 @@ spent 511.4s exporting the 6.34 GB image to a tarball and 150.1s importing it
 back for `load: true`. The Dockerfile now keys its dependency layer on
 `uv.lock` alone and copies README.md, src/ and the workload sample afterwards,
 and the workflow runs a plain `docker build` on the default driver with no
-buildx and no cache export. An ephemeral GitHub runner still has no warm
-build to have; what it no longer pays is the transfer. The post-change
-duration is reported in docs/DECISIONS.md #26 once a run under the new
-configuration exists. `timeout-minutes` stays at 35, above the worst cold
-build observed, and the job stays on every push rather than behind a `paths:`
-filter, so the ci badge always reflects a docker verification of the commit
-it sits on.
+buildx and no cache export. Run 36's whole build, from a cold daemon: 5.1s of
+apt and pip, 33.9s installing 71 packages including the torch CPU wheel, 1.1s
+installing the project, 29.1s exporting layers. `timeout-minutes` is 15,
+eleven times that build, and the job stays on every push rather than behind a
+`paths:` filter, so the ci badge always reflects a docker verification of the
+commit it sits on.
 
 ## Limitations
 

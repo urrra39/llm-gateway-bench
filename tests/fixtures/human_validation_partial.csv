@@ -1,0 +1,8 @@
+priority,priority_reason,config,frac,idx,kind,served_by,similarity,hit_source_idx,dup_type,request,answer_text,baseline_text,judge1_score,judge2_score,human_label
+1,semantic hit judged incorrect (false hit),cache,low,1,cache_semantic,expensive,0.9412,7,trap,synthetic request one,synthetic answer to a different question,synthetic baseline one,0.0,0.0,incorrect
+1,semantic hit judged incorrect (false hit),cache,low,2,cache_semantic,expensive,0.9333,7,trap,synthetic request two,synthetic answer to a different question,synthetic baseline two,0.0,nan,correct
+2,judge passes disagree,cache,low,3,miss,expensive,,,novel,synthetic request three,synthetic answer three,synthetic baseline three,2.0,1.0,correct
+2,judge passes disagree,cache,low,4,miss,expensive,,,novel,synthetic request four,synthetic answer four,synthetic baseline four,1.0,2.0,partial
+3,cascade escalation,router_cascade,low,5,miss,expensive,,,novel,synthetic request five,synthetic answer five,synthetic baseline five,2.0,2.0,2
+4,other judged row,cache,low,6,cache_exact,expensive,,,exact,synthetic request six,synthetic answer six,synthetic baseline six,2.0,nan,
+4,other judged row,cache,low,7,miss,expensive,,,novel,synthetic request seven,synthetic answer seven,synthetic baseline seven,nan,nan,

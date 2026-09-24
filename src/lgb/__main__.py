@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "human-agreement":
         from lgb import humanval
 
-        print(humanval.human_agreement(args.csv))
+        print(humanval.format_report(humanval.human_agreement(args.csv)))
         return 0
     if args.command == "serve":
         import uvicorn

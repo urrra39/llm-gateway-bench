@@ -28,6 +28,8 @@ Index:
 24. The Quickstart states the keyless boundary; upstream failure names its variable.
 25. The false-hit gates get a 5% bar and fail, rather than being deleted.
 26. The docker job drops buildx and the GHA cache; the cache key was the defect.
+27. The authorship guard checks six phrases, and one commit hash is allowlisted.
+28. The human-validation file ships the rows that could change a conclusion.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -298,25 +300,120 @@ driver, which writes layers where the next `docker run` can already see them.
 What this does and does not buy. On any host that keeps an image store
 between builds, the dependency layer is now reused across every prose commit.
 A GitHub-hosted runner is ephemeral and keeps nothing, so it rebuilds from
-scratch every time — but rebuilding is the 72.1s `uv sync` plus the apt and
-wheel work, not the ~1300s of export and upload that the caching machinery
-added to reach the same place. The brief asked for warm builds in single-digit
-minutes; the honest statement is that a fresh GitHub runner has no warm build
-to have, and the way to a single-digit job here was to stop paying for a cache
-that never hit. The next run measures the result, and until it does the
-before/after in the README is one number, not two.
+scratch every time — and the measurement is that rebuilding from scratch is
+cheap. Run 36, the first run under this configuration, reports zero cached
+layers and a docker job of **1m32s**: 5.1s of apt and pip, 33.9s installing
+71 packages including the torch CPU wheel, 1.1s installing the project,
+29.1s exporting layers, 1m18s of Build inside a 1m32s job. Against 21m25s in
+run 35, the caching machinery was about 93% of the job it was meant to
+shorten. The brief asked for warm builds in single-digit minutes; a fresh
+GitHub runner has no warm build to have, and what it has instead is a cold
+build of one and a half minutes, every time.
 
 Kept on every push rather than gated on paths. A `paths:` filter plus a
 scheduled full run would leave the ci badge green on a commit where docker
 never executed, and the badge cannot say which of those two things it means.
 Freshness that cannot be guaranteed is worse than a minute of runner time,
-so the job runs on every push to main and on every pull request.
+so the job runs on every push to main and on every pull request. At 1m32s
+this is no longer a trade worth revisiting.
 
-`timeout-minutes` stays at 35. The worst cold build actually observed is run
-35's 20m44s Build step, under the export path now removed, and a ceiling is
-there to make a hung build fail as a build rather than as a mystery. It gets
-tightened when the new configuration has a measurement of its own, not
-before.
+`timeout-minutes` moved 35 to 15 once run 36 measured the new cold build.
+Fifteen minutes is eleven times 1m18s; the old ceiling was sized for the
+export path that no longer exists, whose worst observed Build was 20m44s. A
+ceiling exists to make a hung build fail as a build rather than as a mystery,
+and eleven times the measured worst case still does that.
 
 No published measurement of the benchmark changed; the numbers in this entry
-are CI durations read from the Actions API and from run 35's build log.
+are CI durations read from the Actions API and from the runs' build logs.
+
+## 27. The authorship guard checks six phrases, and one commit hash is allowlisted.
+
+Rationale: the repository had two authorship guards and they had drifted. The
+file-contents guard checked six phrases; the commit-message guard checked
+four. Two of the six were therefore unguarded in commit messages for the
+whole history. Widening the message guard to the same six is the fix, and the
+widening was proved against history before it shipped: the six-phrase pattern
+matched nothing in any existing message, exit 1.
+
+It then failed on the very next run, and the offender was the commit that did
+the widening. Its message explains what the guard now catches and quotes two
+of the six phrases as search terms to do so. This is recorded rather than
+tidied away because the repository does not rewrite history and does not
+force-push, so the message is permanent and the guard has to be told about
+it. Commit 04589de8bbf806912ad97b369d9caedce419bcbc is allowlisted by full
+SHA, one hash, no pattern and no prefix match. Every other commit is checked,
+including every future one, and the guard reports the offending SHA and
+subject rather than a bare grep line. This mirrors the file-contents guard,
+which already excludes .github/workflows/ci.yml because that file carries the
+search pattern itself, and data/workload/paws_sample.csv because a PAWS
+source sentence contains one of the phrases.
+
+The guard can fail, which is the property that matters, and it was
+demonstrated twice: once in CI, in run 36, where it failed on a real commit
+and blocked the run; and once against a throwaway repository carrying a
+deliberate attribution trailer, where the new per-commit form reported the
+offending hash and exited 1. Both jobs check out with fetch-depth: 0, so the
+guard sees the whole history rather than a shallow slice of it.
+
+No published number changed.
+
+## 28. The human-validation file ships the rows that could change a conclusion.
+
+Rationale: `data/human_validation.csv` existed, had the right column, and was
+useless. It held 60 cache_exact rows from the high-duplicate cache run, every
+one scored 2 or 1 by the judge — the least informative 60 rows the store can
+produce — while the README said it held the highest-value rows ordered false
+hits first, then judge disagreements, then escalations. Two defects in the
+same function made that happen. The sort key tested
+`isinstance(score, int)` while the exporter wrote scores through a
+stringifier, so the false-hit and disagreement tests were false for every
+row and the sort fell through to alphabetical `dup_type`, which begins with
+"exact". And the false-hit test needed to know whether a row was a semantic
+hit, which judge.parquet does not record: `kind` lives in outcomes.parquet
+and has to be joined on (config, frac, idx), which the exporter never did.
+
+The exporter now merges the outcome columns, assigns a priority tier, writes
+the tier and its reason into the file, and sorts on (tier, config, frac, idx)
+so the output is a pure function of the run store and regenerates
+byte-identically. Recomputed over all 1449 judged rows: 34 semantic hits the
+judge scored 0, 19 rows where the two judge passes disagree, 26 cascade
+escalations, 1370 others. The 60-row file takes all of tier 1, all of tier 2
+and 7 of the 26 tier-3 escalations. Tier 1 and tier 2 overlap by one row,
+counted in tier 1. Three exact hits scored 0 exist and are tier 4 by this
+ordering; they are reachable with a larger `--limit`.
+
+Two further defects in the same module were fixed because they would have
+silently corrupted the statistic the file exists to produce. `_norm` mapped
+"2"/"1"/"0" but not the "2.0"/"1.0"/"0.0" spellings parquet actually writes,
+so a judge score could never have equalled a human "correct"; and "nan"
+became a fourth category instead of a missing value, deflating the marginals.
+The agreement report now also states expected agreement, which kappa cannot
+be read without: where one category dominates, a high observed agreement and
+a near-zero kappa are the same measurement and only the chance term says so.
+`human-agreement` prints n, observed, expected and kappa per judge pass, says
+so explicitly when kappa is undefined because chance agreement is 1, and
+distinguishes labelled from unlabelled rows. Verified end to end against a
+committed synthetic fixture of seven rows whose arithmetic is recomputed by
+hand in the test.
+
+docs/HUMAN_LABELING.md is new and states the convention: the 2/1/0 scale
+defined operationally, ten deciding rules applied in order, a column-by-column
+description, and the rule that the judge's own columns are not to be read
+before deciding. Two of its rules exist because they are the ones two
+labellers would otherwise split on: judge the answer against the request and
+never against the baseline text, and a fluent accurate answer to a different
+question is 0.
+
+Nothing writes a human label. The file ships with all 60 cells empty, the
+exporter writes the empty string unconditionally, and a test fails if
+data/human_validation.csv ever contains a label. Estimated effort for the 60
+rows is about 2 to 3 hours, stated as an estimate in the same sentence in
+both README and protocol, with its basis given as 7,406 words of request and
+answer text; no row has been labelled, so there is no observed rate and none
+is implied.
+
+No published number moved. human_label_coverage was 0/60 before the change
+and is 0/60 after it, because the file was never labelled and still is not.
+judge_independence is untouched and cannot close under the one-model
+constraint; the two conditions that would close it are named in the README
+block and at the end of docs/HUMAN_LABELING.md.
