@@ -529,6 +529,27 @@ LGB_GATEWAY_BASE_URL, default http://host.docker.internal:8787/v1 (Docker
 Desktop); on Linux set LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or use
 host networking.
 
+Build cost in CI. The job had layer caching and the caching was the expense.
+Durations read from the Actions API: run 33, writing a cold GitHub Actions
+cache, took 16m41s of docker; run 35, reading that cache warm, took 21m25s,
+of which the Build step was 20m44s. Run 35's log restored exactly two layers
+(WORKDIR, and the apt-get plus pip line) and never once restored the 72.1s
+`uv sync`, because `COPY pyproject.toml uv.lock README.md Makefile ./` sat
+above it and README.md changes on nearly every commit here. Against that
+72.1s, `cache-to: type=gha,mode=max` spent 650.7s uploading layers, and
+buildx's container driver — which cannot write into the daemon image store —
+spent 511.4s exporting the 6.34 GB image to a tarball and 150.1s importing it
+back for `load: true`. The Dockerfile now keys its dependency layer on
+`uv.lock` alone and copies README.md, src/ and the workload sample afterwards,
+and the workflow runs a plain `docker build` on the default driver with no
+buildx and no cache export. An ephemeral GitHub runner still has no warm
+build to have; what it no longer pays is the transfer. The post-change
+duration is reported in docs/DECISIONS.md #26 once a run under the new
+configuration exists. `timeout-minutes` stays at 35, above the worst cold
+build observed, and the job stays on every push rather than behind a `paths:`
+filter, so the ci badge always reflects a docker verification of the commit
+it sits on.
+
 ## Limitations
 
 - Workload is constructed; hit rate does not predict any real traffic.

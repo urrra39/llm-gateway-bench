@@ -26,7 +26,10 @@ jobs:
         run: uv run pytest -q
       - name: Authorship
         run: |
-          if git log --format='%B' | grep -iE "co-authored|generated with|copilot|assisted by"; then
+          # Same pattern as the file-contents guard below. The two drifted
+          # once: this one checked four phrases while that one checked six,
+          # so a message saying "with the help of" would have passed.
+          if git log --format='%B' | grep -iE "co-authored|generated with|copilot|assisted by|ai assistance|with the help of"; then
             echo "authorship trailer found" >&2
             exit 1
           fi
@@ -44,22 +47,30 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    # Cold image builds (torch CPU wheel) run past 20 minutes; the prior
-    # green run took about 16.5. Layer cache covers the repeat case.
+    # Stays above the worst cold build actually observed (20m44s of Build in
+    # run 35, under the buildx export path removed below) until the new
+    # configuration has a measurement of its own. The point of the ceiling is
+    # that a hung build fails as a build, not as a mystery.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: docker/setup-buildx-action@v3
+      # Plain `docker build` on the default daemon driver, measured against
+      # the alternative rather than assumed. buildx's container driver with
+      # `load: true` cannot write into the image store, so it exported the
+      # 6.34 GB image to a tarball and re-imported it: 511.4s exporting plus
+      # 150.1s importing in run 35. `cache-to: type=gha,mode=max` then spent
+      # 650.7s uploading layers to save a 72.1s `uv sync` that the old COPY
+      # order invalidated on every README edit anyway, so the only layers it
+      # ever restored were WORKDIR and apt-get. Net effect of caching on this
+      # repository: run 33 took 16m41s, run 35 took 21m25s. The Dockerfile's
+      # dependency layer is now keyed on uv.lock alone, so the daemon reuses
+      # it across builds on any host that keeps an image store; ephemeral
+      # runners rebuild from scratch, which is two minutes of work, not
+      # twenty of transfer.
       - name: Build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          load: true
-          tags: llm-gateway-bench:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: docker build -t llm-gateway-bench:ci .
       - name: Start gateway
         run: |
           docker run -d --name gateway -p 8000:8000 \

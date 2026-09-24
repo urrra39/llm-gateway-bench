@@ -27,6 +27,7 @@ Index:
 23. No published number moved this round; the description names the finding.
 24. The Quickstart states the keyless boundary; upstream failure names its variable.
 25. The false-hit gates get a 5% bar and fail, rather than being deleted.
+26. The docker job drops buildx and the GHA cache; the cache key was the defect.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -260,3 +261,62 @@ No measured number moved. The results.json diff is six fields: two gate
 names, two observed strings, two passed booleans. The gate line moved from
 9/11 PASS, 2 FAIL to 7/11 PASS, 4 FAIL, and all_gates_passed was already
 false.
+
+## 26. The docker job drops buildx and the GHA cache; the cache key was the defect.
+
+Rationale: the job already had layer caching and the caching was the cost.
+Measured from the Actions API, not estimated: run 33 (`cache-to` writing a
+cold cache) took 16m41s of docker; run 35 (the same cache warm, meant to be
+the fast one) took 21m25s, of which the Build step alone was 20m44s. Caching
+made the job 4m44s slower.
+
+Run 35's build log says why. `grep -c CACHED` over it returns 2, and the two
+restored layers are WORKDIR and the apt-get/pip line. The expensive step,
+`#14 RUN uv sync --frozen --no-dev --extra embeddings` at 72.1s, was never
+once a cache hit, because `COPY pyproject.toml uv.lock README.md Makefile ./`
+sat directly above it. This repository's product is documents; README.md
+changes on nearly every commit, so the dependency layer was invalidated on
+nearly every commit. Meanwhile `cache-to: type=gha,mode=max` spent 650.7s
+uploading layers to save that 72.1s step, and buildx's `docker-container`
+driver cannot write into the daemon's image store, so `load: true` exported
+the 6.34 GB image to a tarball and re-imported it: 511.4s in `exporting to
+docker image format` plus 150.1s in `importing to docker`. Roughly 1300s of
+the 1285s Build step was transfer, not build.
+
+So the fix is subtraction plus one reordering, and it is two changes, not one.
+The Dockerfile now copies `pyproject.toml` and `uv.lock` alone, runs
+`uv sync --no-install-project` against them, and only then copies README.md,
+Makefile, config/, src/ and the workload sample before a second `uv sync`
+that installs the project itself. The dependency layer is keyed on the lock
+file, which is the thing that actually determines the dependencies.
+(`readme = "README.md"` in pyproject.toml is why README was in the first COPY
+at all; `--no-install-project` does not read it.) The workflow then drops
+docker/setup-buildx-action, docker/build-push-action, `cache-from`,
+`cache-to` and `load: true` for a plain `docker build` on the default daemon
+driver, which writes layers where the next `docker run` can already see them.
+
+What this does and does not buy. On any host that keeps an image store
+between builds, the dependency layer is now reused across every prose commit.
+A GitHub-hosted runner is ephemeral and keeps nothing, so it rebuilds from
+scratch every time — but rebuilding is the 72.1s `uv sync` plus the apt and
+wheel work, not the ~1300s of export and upload that the caching machinery
+added to reach the same place. The brief asked for warm builds in single-digit
+minutes; the honest statement is that a fresh GitHub runner has no warm build
+to have, and the way to a single-digit job here was to stop paying for a cache
+that never hit. The next run measures the result, and until it does the
+before/after in the README is one number, not two.
+
+Kept on every push rather than gated on paths. A `paths:` filter plus a
+scheduled full run would leave the ci badge green on a commit where docker
+never executed, and the badge cannot say which of those two things it means.
+Freshness that cannot be guaranteed is worse than a minute of runner time,
+so the job runs on every push to main and on every pull request.
+
+`timeout-minutes` stays at 35. The worst cold build actually observed is run
+35's 20m44s Build step, under the export path now removed, and a ceiling is
+there to make a hung build fail as a build rather than as a mystery. It gets
+tightened when the new configuration has a measurement of its own, not
+before.
+
+No published measurement of the benchmark changed; the numbers in this entry
+are CI durations read from the Actions API and from run 35's build log.
