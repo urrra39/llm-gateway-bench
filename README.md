@@ -48,7 +48,7 @@ Then, in a second terminal:
 ```
 # answers with no endpoint configured
 curl -s localhost:8000/health
-# {"ok": true, "cache_size": 0}
+# {"ok":true,"cache_size":0}
 
 # needs an endpoint
 curl -s localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
@@ -426,15 +426,14 @@ make all
 ```
 
 `make all` needs that endpoint for its `run-low`, `run-high` and `judge`
-stages and stops at the first `lgb run` without one.
-`make pilot` runs a 50-request sanity path on the low fraction and needs the
-endpoint too. `make all`
-rebuilds workloads, tunes the threshold on one half, runs all four configs on
-both fractions, judges, assembles results.json, and audits docs. All stages
-are resumable with atomic parquet checkpointing; a kill discards at most one in-flight row.
-The embeddings extra (sentence-transformers plus torch CPU) is needed for
-tuning and cached runs; serve alone answers with exact-match caching without
-downloaded weights.
+stages and stops at the first `lgb run` without one. `make pilot` runs a
+50-request sanity path on the low fraction and needs the endpoint too.
+`make all` rebuilds workloads, tunes the threshold on one half, runs all four
+configs on both fractions, judges, assembles results.json, and audits docs.
+All stages are resumable with atomic parquet checkpointing; a kill discards at
+most one in-flight row. The embeddings extra (sentence-transformers plus torch
+CPU) is needed for tuning and cached runs; serve alone answers with
+exact-match caching without downloaded weights.
 
 ## Hardware and runtime
 
@@ -513,7 +512,7 @@ failed` in the container logs, container torn down).
 docker compose up --build
 # gateway on localhost:8000 (container binds 0.0.0.0:8000)
 curl -s localhost:8000/health
-# {"ok": true, "cache_size": 0}
+# {"ok":true,"cache_size":0}
 ```
 
 Expected: image builds (torch CPU wheel plus ~90 MB embedding weights
@@ -525,10 +524,10 @@ configured upstream, or against a keyed upstream with no key set, chat
 returns HTTP 500 after 3 attempts with a JSON body that names the variable to
 set — `{"error": {"message": "chat failed for deepseek-v4-flash: ...", "type":
 "upstream_unavailable", "param": "LGB_GATEWAY_BASE_URL"}}` — and uvicorn logs
-the same message. The
-container reaches the upstream via LGB_GATEWAY_BASE_URL, default
-http://host.docker.internal:8787/v1 (Docker Desktop); on Linux set
-LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or use host networking.
+the same message. The container reaches the upstream via
+LGB_GATEWAY_BASE_URL, default http://host.docker.internal:8787/v1 (Docker
+Desktop); on Linux set LGB_GATEWAY_BASE_URL=http://172.17.0.1:8787/v1 or use
+host networking.
 
 ## Limitations
 
