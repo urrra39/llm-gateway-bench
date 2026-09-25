@@ -76,13 +76,16 @@ and quality is one judge pair from the same model with no human verification.
 Every cost number below is a function of the duplicate fractions, not a
 prediction about anyone's traffic. See docs/CEILING.md.
 
-Validity gates: all_gates_passed=false for run `full` (7/11 PASS, 4 FAIL).
+Validity gates: all_gates_passed=false for run `full` (6/11 PASS, 5 FAIL).
 Two failures forbid any correctness claim about the quality column: no human
 has verified a label, and both judges are the same model. Two more say the
 semantic cache is not shippable on this workload: its false-hit rate sits
-above the 5% bar on both duplicate fractions. Every gate below compares a
-measurement against a bound the data could have crossed, and the audit
-refuses any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
+above the 5% bar on both duplicate fractions. The fifth is the tuning gate:
+the tuned threshold only ties the best of 64 random thresholds — F1 is flat
+across the recall-saturated plateau, so tuning on it selects nothing — and a
+tie is not a pass (see Findings and docs/OPEN_DEFECTS.md D6). Every gate below
+compares a measurement against a bound the data could have crossed, and the
+audit refuses any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
 
 | gate | status | observed |
 |---|---|---|
@@ -94,7 +97,7 @@ refuses any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
 | baseline_costs_more_high_router_cascade | PASS | baseline 0.9187 vs router_cascade 0.2294 |
 | baseline_costs_more_high_router_heuristic | PASS | baseline 0.9187 vs router_heuristic 0.2212 |
 | false_hit_rate_within_bound_high | FAIL | 0.0941 (8 of 85 semantic hits) vs bar 0.0500 |
-| tuned_threshold_beats_random_control | PASS | tuned 0.79 f1 0.9007633587786259 vs control_mean 0.8279916296353538 max 0.9007633587786259 |
+| tuned_threshold_beats_random_control | FAIL | tuned 0.79 f1 0.9008 vs control max 0.9008 (mean 0.8280) |
 | human_label_coverage | FAIL | 0/60 = 0.000 |
 | judge_independence | FAIL | primary deepseek-v4-flash == secondary deepseek-v4-flash; kappa 0.8034 (n=338) is self-consistency |
 
@@ -104,13 +107,15 @@ not shippable for correctness-sensitive traffic, and a false hit is worse
 than a miss because the user gets no signal that anything went wrong. It is
 defined once as `FALSE_HIT_RATE_BAR` in src/lgb/metrics.py.
 
-No measured number moved in this round. The only changes to results.json are
-the two false-hit gates: `false_hit_rate_reported_{low,high}` became
-`false_hit_rate_within_bound_{low,high}`, and both flipped PASS to FAIL
-because they now compare 0.0889 and 0.0941 against the 5% bar instead of
-merely asserting that a rate exists. The gate line moved 9/11 PASS, 2 FAIL to
-7/11 PASS, 4 FAIL. Every rate, interval and cost is byte-identical to the
-previous results.json.
+No measured number moved in this round. The only change to results.json is
+the tuning gate: `tuned_threshold_beats_random_control` now compares the tuned
+F1 against the best (maximum) of the 64 random thresholds rather than their
+mean, and flips PASS to FAIL. The tuned F1 0.9008 and the control maximum
+0.9008 are equal to full precision because F1 is flat across the
+recall-saturated plateau (threshold 0.745 through 0.79), so the best random
+draw lands on the same maximum; a tie is not a pass. The gate line moved 7/11
+PASS, 4 FAIL to 6/11 PASS, 5 FAIL. Every rate, interval and cost is
+byte-identical to the previous results.json.
 
 ## The one remaining human step
 
@@ -189,6 +194,19 @@ previous results.json.
    and none of the router savings transfer to a vendor-switching decision.
    What transfers: the cache mechanics, the threshold trade curve shape, and
    the tail-latency behavior.
+6. Tuning the similarity threshold on F1 selects nothing on this workload,
+   because recall is already saturated where the objective is maximized. F1
+   reaches its maximum across the whole plateau from threshold 0.745 to 0.79 —
+   recall is 1.0000 and the false-positive count is a constant 26 over that
+   region — so F1 assigns threshold 0.79 and every other plateau threshold one
+   identical value, 0.9008. The 64-draw random control includes draws that land
+   on that plateau and reach the same F1 to the last digit, so
+   `tuned_threshold_beats_random_control` now records FAIL: a tie is not a
+   pass. This is the sharper form of the wrong-objective admission in "False
+   hits: the trade curve and what ships" below — the point is not only that F1
+   is the wrong loss for correctness-sensitive traffic, but that across the
+   saturated region F1 ranks every threshold equally, so tuning on it chooses
+   arbitrarily within the plateau.
 
 ## Headline table
 
@@ -511,8 +529,9 @@ Requests derive from PAWS labeled pairs (google-research-datasets/paws,
 labeled_final/train, 3000-row committed sample in data/workload/paws_sample.csv).
 Label 1 pairs give paraphrase should-hit rows; label 0 pairs give trap
 should-not-hit rows. The similarity threshold 0.79 was tuned on one half and
-reported on the other; the random-threshold control mean F1 is
-0.8279916296353538 against tuned F1 0.9007633587786259.
+reported on the other; against tuned F1 0.9008 the 64 random-threshold control
+has mean F1 0.8280 and maximum F1 0.9008, so the maximum ties the tuned value
+and the tuning gate now fails (see Findings and docs/OPEN_DEFECTS.md D6).
 
 Judge rubric is frozen in config/bench.yaml. Per-row verdicts persist under
 data/runs/*/judge.parquet. Judge self-consistency is κ 0.8034 with n=338

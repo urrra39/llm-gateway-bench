@@ -63,7 +63,7 @@ GATE_BOUNDS: dict[str, str] = {
         "high router_heuristic cost_usd < high baseline cost_usd"
     ),
     "false_hit_rate_within_bound_high": "high cache false_hit_rate <= FALSE_HIT_RATE_BAR",
-    "tuned_threshold_beats_random_control": "tuning tuned_f1 > control_random_mean_f1",
+    "tuned_threshold_beats_random_control": "tuning tuned_f1 > control_random_max_f1",
     "human_label_coverage": "filled human_label rows / total rows >= 0.50",
     "judge_independence": "judge_primary != judge_secondary",
 }
@@ -130,6 +130,21 @@ DEFECTS: list[dict[str, str]] = [
             "tables use latency_ms; the tail decomposition uses latency_ms "
             "for tail rows); blocks any future claim that decomposes cascade "
             "latency from model_ms."
+        ),
+    },
+    {
+        "id": "D6",
+        "status": "open",
+        "title": "Tuning F1 over the recall-saturated plateau selects nothing; the gate ties",
+        "detail": (
+            "F1 reaches its maximum 0.9008 across ten grid thresholds from 0.745 "
+            "through 0.79, every one with tp 118, fp 26, fn 0 and recall 1.0000, "
+            "so the objective ranks the whole plateau identically and its argmax "
+            "picks 0.79 arbitrarily. Seven of the 64 random control draws land on "
+            "that plateau, so control_random_max_f1 equals tuned_f1 to full float "
+            "precision and tuned_threshold_beats_random_control records FAIL: a "
+            "tie is not a pass. Closes when the gate is fed an objective whose "
+            "argmax is unique, or a grid whose resolution separates the plateau."
         ),
     },
 ]

@@ -294,8 +294,8 @@
     },
     {
       "name": "tuned_threshold_beats_random_control",
-      "observed": "tuned 0.79 f1 0.9007633587786259 vs control_mean 0.8279916296353538 max 0.9007633587786259",
-      "passed": true
+      "observed": "tuned 0.79 f1 0.9008 vs control max 0.9008 (mean 0.8280)",
+      "passed": false
     },
     {
       "name": "human_label_coverage",

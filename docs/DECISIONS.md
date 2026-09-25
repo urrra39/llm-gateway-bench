@@ -30,6 +30,7 @@ Index:
 26. The docker job drops buildx and the GHA cache; the cache key was the defect.
 27. The authorship guard checks six phrases, and one commit hash is allowlisted.
 28. The human-validation file ships the rows that could change a conclusion.
+29. The tuning gate compares against the control maximum and fails on a tie.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -229,6 +230,11 @@ cannot run without an upstream (run/judge call the model), stated beside the
 
 ## 25. The false-hit gates get a 5% bar and fail, rather than being deleted.
 
+Superseded in part by #29: tuned_threshold_beats_random_control now compares
+tuned F1 against the control maximum, not the mean, and records FAIL on the
+exact tie the re-audit below anticipated. The 5% false-hit bar and the rest of
+this entry still hold.
+
 Rationale: false_hit_rate_reported_low and false_hit_rate_reported_high
 asserted only that a false-hit rate existed. No observation could have
 failed them, so they inflated the pass count without testing anything. Two
@@ -421,3 +427,30 @@ and is 0/60 after it, because the file was never labelled and still is not.
 judge_independence is untouched and cannot close under the one-model
 constraint; the two conditions that would close it are named in the README
 block and at the end of docs/HUMAN_LABELING.md.
+
+## 29. The tuning gate compares against the control maximum and fails on a tie.
+
+Rationale: F1 is flat at its maximum across the recall-saturated plateau. On
+the report half the objective reaches 0.9008 across ten grid thresholds from
+0.745 through 0.79, every one of them with tp 118, fp 26, fn 0 and recall
+1.0000; the false-positive count is a constant 26 over that whole region, so
+F1 assigns 0.79 and the other nine plateau thresholds one identical value and
+its argmax picks 0.79 arbitrarily. Seven of the 64 random control draws land
+on that plateau, so control_random_max_f1 equals tuned_f1 to the last digit.
+
+Comparing tuned F1 against the control maximum rather than its mean is the
+honest form of the gate, and if it then fails, it is published failing. A gate
+that a tie satisfies is not a gate. The old form compared against the mean
+0.8280, which the tuned point clears, so the gate passed on a bound the data
+could not have crossed; the new form compares against the maximum 0.9008,
+which the tuned point only ties, so the gate reads FAIL. This is D6, whose
+close condition is an objective whose argmax is unique, or a grid whose
+resolution separates the plateau, and it is the sharpest form of #13: not only
+does no point ship under a false-hit-weighted loss, but across the saturated
+region F1 ranks every threshold identically, so tuning on it chooses nothing.
+
+The change is spend-free and no measured number moved. results.json changed
+two fields, the tuned gate observed string and its passed boolean; the observed
+was rounded to four places at the same time (0.9008, 0.8280). The gate line
+moved from 7/11 PASS, 4 FAIL to 6/11 PASS, 5 FAIL, and all_gates_passed was
+already false.

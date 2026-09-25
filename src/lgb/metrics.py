@@ -5,8 +5,10 @@ Validity gates are code, not prose:
   is broken;
 - the semantic-cache false-hit rate must sit at or below FALSE_HIT_RATE_BAR,
   and never be folded into the hit rate;
-- the tuned threshold must beat the mean of 64 random thresholds drawn from
-  the tuning grid, or the tuning did nothing;
+- the tuned threshold must beat the best of 64 random thresholds drawn from
+  the tuning grid, not their mean; F1 is flat across the recall-saturated
+  plateau, so the best random draw ties the tuned point and this gate now
+  fails (docs/OPEN_DEFECTS.md D6);
 - human_label_coverage and judge_independence record the label-quality state
   honestly: both fail until a human verifies labels and the judges differ.
   A gate set that passes under zero human verification is not a gate set.
@@ -662,21 +664,39 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
         cm = metrics[f"{frac}_cache"]
         gates.append(false_hit_rate_gate(frac, cm))
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}
-    # Strictly greater: an equal F1 means the tuning picked a point no better
-    # than a random threshold, which is a published failure, not a pass.
-    # The control is the mean F1 of 64 thresholds drawn uniformly from the
-    # tuning grid; see run.tune_threshold.
+    # Strictly greater against the control MAXIMUM, not its mean. F1 is flat at
+    # its maximum across the recall-saturated plateau (threshold 0.745 through
+    # 0.79, recall 1.0, false positives constant at 26), so the best of 64
+    # random draws lands on that plateau and ties the tuned F1 to full
+    # precision. Comparing against the mean let the tie pass; the max is the
+    # honest form, and on this workload it fails: tuning a similarity threshold
+    # on F1 where recall is saturated selects nothing. results.json keeps the
+    # full-precision numbers; the observed string is rounded to four decimals so
+    # the front page does not print a seventeen-digit float. See
+    # docs/DECISIONS.md #29 and docs/OPEN_DEFECTS.md D6.
     tuned_f1 = tuning.get("tuned_f1")
-    control_f1 = tuning.get("control_random_mean_f1", tuning.get("control_f1"))
-    tuned_ok = isinstance(tuned_f1, (int, float)) and isinstance(control_f1, (int, float))
+    control_f1 = tuning.get("control_random_max_f1")
+    mean_f1 = tuning.get("control_random_mean_f1")
+    if isinstance(tuned_f1, (int, float)) and isinstance(control_f1, (int, float)):
+        tuned_passed = float(tuned_f1) > float(control_f1)
+        if isinstance(mean_f1, (int, float)):
+            tuned_observed = (
+                f"tuned {tuning.get('threshold')} f1 {float(tuned_f1):.4f} "
+                f"vs control max {float(control_f1):.4f} (mean {float(mean_f1):.4f})"
+            )
+        else:
+            tuned_observed = (
+                f"tuned {tuning.get('threshold')} f1 {float(tuned_f1):.4f} "
+                f"vs control max {float(control_f1):.4f}"
+            )
+    else:
+        tuned_passed = False
+        tuned_observed = "tuning record absent or non-numeric"
     gates.append(
         {
             "name": "tuned_threshold_beats_random_control",
-            "passed": bool(tuned_ok and float(tuned_f1) > float(control_f1)),  # type: ignore[arg-type]
-            "observed": (
-                f"tuned {tuning.get('threshold')} f1 {tuned_f1} "
-                f"vs control_mean {control_f1} max {tuning.get('control_random_max_f1')}"
-            ),
+            "passed": tuned_passed,
+            "observed": tuned_observed,
         }
     )
     kappa = kappa_report(cfg)
