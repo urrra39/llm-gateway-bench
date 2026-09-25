@@ -284,3 +284,47 @@ def test_audit_requires_the_exact_hit_reconciliation(
     monkeypatch.setattr(audit, "README", target)
     errors: list[str] = audit.check_exact_hit_counts(audit.load_results())
     assert any("does not reconcile" in e for e in errors)
+
+
+def test_audit_human_gate_follows_the_csv_row_count() -> None:
+    """The human-gate denominator is the CSV's real row count, not a literal.
+
+    Reads data/human_validation.csv independently and requires the audit's
+    derived pairs to carry (ceil(bar * n), n) and (filled, n) for that exact n.
+    A change to the file's length without the audit re-deriving fails here,
+    which is what stops a hand-written (30, 60) from surviving a resized file.
+    """
+    import csv as _csv
+    from math import ceil
+
+    from lgb.metrics import HUMAN_LABEL_COVERAGE_BAR
+
+    audit = _load_audit()
+    with Path("data/human_validation.csv").open(newline="", encoding="utf-8") as fh:
+        rows = list(_csv.DictReader(fh))
+    total = len(rows)
+    filled = sum(1 for r in rows if str(r.get("human_label", "")).strip())
+    assert audit._human_validation_counts() == (filled, total)
+    pairs = audit._known_pairs(audit.load_results())
+    assert (ceil(HUMAN_LABEL_COVERAGE_BAR * total), total) in pairs
+    assert (filled, total) in pairs
+
+
+def test_known_pairs_track_a_resized_human_validation_csv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Growing the CSV moves the human-gate pair the audit accepts.
+
+    With the counts helper returning a different (filled, total), the known
+    pairs carry the new (needed, total), so a reversion to a literal (30, 60)
+    would fail: neither derived pair below would be present.
+    """
+    from math import ceil
+
+    from lgb.metrics import HUMAN_LABEL_COVERAGE_BAR
+
+    audit = _load_audit()
+    monkeypatch.setattr(audit, "_human_validation_counts", lambda: (7, 83))
+    pairs = audit._known_pairs(audit.load_results())
+    assert (ceil(HUMAN_LABEL_COVERAGE_BAR * 83), 83) in pairs
+    assert (7, 83) in pairs

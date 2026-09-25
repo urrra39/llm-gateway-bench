@@ -40,6 +40,20 @@ HUMAN_LABELING = REPO / "docs" / "HUMAN_LABELING.md"
 EXPECTED_CONFIGS = ("baseline", "cache", "router_cascade", "router_heuristic")
 EXPECTED_FRACS = ("low", "high")
 
+# --- CONSTANTS ---------------------------------------------------------------
+# Engineering-choice constants that are not derived from any artifact, named
+# here rather than written inline so a reader can see every hand-set number in
+# one place. Everything else this module compares against is re-derived from
+# results.json, the parquet store, the workload meta or data/human_validation.csv.
+#
+# NO_SHIP_FALSE_HIT_PCT is the "no threshold reaches 2% false hits" reference
+# the README and DECISIONS #13 state. It is not a measurement — it is the bar
+# the prose names — so check_ratios lists it as an allowed percentage and the
+# sweep-minimum guard asserts the committed sweep never actually reaches it,
+# which is what keeps that sentence true. The human-label bar lives in
+# lgb.metrics as HUMAN_LABEL_COVERAGE_BAR and is imported where it is needed.
+NO_SHIP_FALSE_HIT_PCT = 2.0
+
 #: Every gate, with the bound it compares a measurement against. A gate that
 #: only asserts a number exists cannot be written down here, because there is
 #: no bound to write: that is the whole point of the registry. Both false-hit
@@ -76,7 +90,7 @@ GATE_BOUNDS: dict[str, str] = {
         "high router_heuristic false_hit_rate <= FALSE_HIT_RATE_BAR"
     ),
     "tuned_threshold_beats_random_control": "tuning tuned_f1 > control_random_max_f1",
-    "human_label_coverage": "filled human_label rows / total rows >= 0.50",
+    "human_label_coverage": "filled human_label rows / total rows >= HUMAN_LABEL_COVERAGE_BAR",
     "judge_independence": "judge_primary != judge_secondary",
 }
 
@@ -521,6 +535,26 @@ def _ratio_docs() -> tuple[Path, ...]:
     return (README, CEILING, DECISIONS, OPEN_DEFECTS)
 
 
+def _human_validation_counts() -> tuple[int, int]:
+    """(filled, total) rows in data/human_validation.csv, read fresh.
+
+    total is the denominator the human-label gate uses; filled is how many
+    rows carry a label (zero on a clean clone). Both are derived from the file
+    so its length flows into the audit instead of a hand-written 60, and the
+    (needed, total) pair the gate compares against moves with it.
+    """
+    import csv
+
+    path = REPO / "data" / "human_validation.csv"
+    try:
+        with path.open(newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+    except OSError:
+        return (0, 0)
+    filled = sum(1 for r in rows if str(r.get("human_label", "")).strip())
+    return (filled, len(rows))
+
+
 def _known_pairs(data: dict[str, object]) -> set[tuple[int, int]]:
     """Every (count, denominator) pair the docs may state, re-derived."""
     pairs: set[tuple[int, int]] = set()
@@ -557,8 +591,16 @@ def _known_pairs(data: dict[str, object]) -> set[tuple[int, int]]:
     kappa = data.get("kappa", {})
     if isinstance(kappa, dict) and kappa.get("n"):
         pairs.add((int(kappa["n"]), int(kappa["n"])))
-    pairs.add((30, 60))  # human gate: 30 of the 60 shipped rows
-    pairs.add((0, 60))
+    # Human-label gate: the denominator is the CSV's own row count and the pass
+    # count is ceil(bar * n), both derived so a change to the file flows here.
+    from math import ceil
+
+    from lgb.metrics import HUMAN_LABEL_COVERAGE_BAR
+
+    filled, total = _human_validation_counts()
+    if total:
+        pairs.add((ceil(HUMAN_LABEL_COVERAGE_BAR * total), total))
+        pairs.add((filled, total))
     return pairs
 
 
@@ -591,11 +633,12 @@ def _known_percentages(data: dict[str, object]) -> list[float]:
         values.extend(float(v) * 100.0 for v in sweep["false_hit_rate"].tolist())
         values.extend(float(v) * 100.0 for v in sweep["recall"].tolist())
     values.extend(_workload_fractions())
-    values.append(50.0)  # human gate threshold: 30 of 60 rows
-    values.append(2.0)  # shippability bar for false hits; the sweep-minimum
-    # guard below keeps it meaningful (it must stay below every sweep value)
-    from lgb.metrics import FALSE_HIT_RATE_BAR
+    from lgb.metrics import FALSE_HIT_RATE_BAR, HUMAN_LABEL_COVERAGE_BAR
 
+    # The human-label gate threshold as a percentage, derived from the bar
+    # (50% is 0.50 * 100), and the no-ship false-hit reference the prose names.
+    values.append(HUMAN_LABEL_COVERAGE_BAR * 100.0)
+    values.append(NO_SHIP_FALSE_HIT_PCT)
     values.append(FALSE_HIT_RATE_BAR * 100.0)  # the false-hit gate's bar
     return values
 
@@ -655,7 +698,7 @@ def check_ratios(data: dict[str, object]) -> list[str]:
                     r"(successful|rows|requests|hits|errors|calls|verdicts|labels)\b", after
                 ):
                     errors.append(f"{tag} states a count as a range: {match.group(0).strip()}")
-    if sweep_min_fhr is not None and sweep_min_fhr <= 2.0:
+    if sweep_min_fhr is not None and sweep_min_fhr <= NO_SHIP_FALSE_HIT_PCT:
         errors.append("sweep minimum false-hit rate reaches 2%; the no-ship claim moved")
     return errors
 

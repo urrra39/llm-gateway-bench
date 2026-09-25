@@ -57,6 +57,14 @@ from lgb.store import read_json, read_parquet, write_json
 #: they had.
 FALSE_HIT_RATE_BAR = 0.05
 
+#: Bar for the human-validation gate: at least half the shipped rows must carry
+#: a human label before the quality column can be called verified. Like the
+#: false-hit bar it is a stated engineering choice, not a measurement, and it is
+#: defined once here so the gate, its observed string and the audit's derived
+#: (needed, total) pair all read the same number. The denominator is the CSV's
+#: own row count, never a hand-written constant.
+HUMAN_LABEL_COVERAGE_BAR = 0.50
+
 
 def _has_error(value: Any) -> bool:
     """True when an outcome row carries a real error string.
@@ -378,7 +386,7 @@ def human_label_coverage(cfg: Config) -> dict[str, Any]:
     observed = f"{filled}/{len(rows)} = {filled / len(rows):.3f}" if rows else "csv empty"
     return {
         "name": "human_label_coverage",
-        "passed": bool(rows) and filled / len(rows) >= 0.50,
+        "passed": bool(rows) and filled / len(rows) >= HUMAN_LABEL_COVERAGE_BAR,
         "observed": observed,
     }
 
