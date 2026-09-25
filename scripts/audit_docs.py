@@ -54,7 +54,13 @@ GATE_BOUNDS: dict[str, str] = {
     "baseline_costs_more_low_router_heuristic": (
         "low router_heuristic cost_usd < low baseline cost_usd"
     ),
-    "false_hit_rate_within_bound_low": "low cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "false_hit_rate_within_bound_low_cache": "low cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "false_hit_rate_within_bound_low_router_cascade": (
+        "low router_cascade false_hit_rate <= FALSE_HIT_RATE_BAR"
+    ),
+    "false_hit_rate_within_bound_low_router_heuristic": (
+        "low router_heuristic false_hit_rate <= FALSE_HIT_RATE_BAR"
+    ),
     "baseline_costs_more_high_cache": "high cache cost_usd < high baseline cost_usd",
     "baseline_costs_more_high_router_cascade": (
         "high router_cascade cost_usd < high baseline cost_usd"
@@ -62,7 +68,13 @@ GATE_BOUNDS: dict[str, str] = {
     "baseline_costs_more_high_router_heuristic": (
         "high router_heuristic cost_usd < high baseline cost_usd"
     ),
-    "false_hit_rate_within_bound_high": "high cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "false_hit_rate_within_bound_high_cache": "high cache false_hit_rate <= FALSE_HIT_RATE_BAR",
+    "false_hit_rate_within_bound_high_router_cascade": (
+        "high router_cascade false_hit_rate <= FALSE_HIT_RATE_BAR"
+    ),
+    "false_hit_rate_within_bound_high_router_heuristic": (
+        "high router_heuristic false_hit_rate <= FALSE_HIT_RATE_BAR"
+    ),
     "tuned_threshold_beats_random_control": "tuning tuned_f1 > control_random_max_f1",
     "human_label_coverage": "filled human_label rows / total rows >= 0.50",
     "judge_independence": "judge_primary != judge_secondary",
@@ -185,8 +197,8 @@ def check_gates(data: dict[str, object]) -> list[str]:
             errors.append(f"results.json lacks the {name} gate")
         elif gate.get("passed") is not False:
             errors.append(f"{name} gate should fail")
-    if len(gates) != 11:
-        errors.append(f"results.json has {len(gates)} gates, want 11")
+    if len(gates) != 15:
+        errors.append(f"results.json has {len(gates)} gates, want 15")
     metrics = data.get("metrics", {})
     assert isinstance(metrics, dict)
     for frac in EXPECTED_FRACS:
@@ -967,7 +979,11 @@ def check_gate_bounds(data: dict[str, object]) -> list[str]:
 
 
 def _recompute_false_hit_gates(data: dict[str, object], gates: list[Any]) -> list[str]:
-    """Re-derive the false-hit verdict from the metrics block and the bar."""
+    """Re-derive every false-hit verdict from the metrics block and the bar.
+
+    The bar applies to every config that serves cached answers: the cache and
+    both routers, on both fractions. Each gate is recomputed independently.
+    """
     from lgb.metrics import FALSE_HIT_RATE_BAR
 
     errors: list[str] = []
@@ -975,27 +991,28 @@ def _recompute_false_hit_gates(data: dict[str, object], gates: list[Any]) -> lis
     assert isinstance(metrics, dict)
     by_name = {str(g.get("name")): g for g in gates if isinstance(g, dict)}
     for frac in EXPECTED_FRACS:
-        gate = by_name.get(f"false_hit_rate_within_bound_{frac}")
-        entry = metrics.get(f"{frac}_cache", {})
-        if gate is None or not isinstance(entry, dict):
-            continue
-        rate = entry.get("false_hit_rate")
-        if not isinstance(rate, (int, float)):
-            errors.append(f"{frac}_cache has no false_hit_rate to gate on")
-            continue
-        want = float(rate) <= FALSE_HIT_RATE_BAR
-        if gate.get("passed") is not want:
-            errors.append(
-                f"false_hit_rate_within_bound_{frac} says {gate.get('passed')} but "
-                f"{rate} <= {FALSE_HIT_RATE_BAR} is {want}"
-            )
-        k = len(entry.get("false_hit_rows") or [])
-        n = entry.get("cache_semantic_hits")
-        if f"({k} of {n} semantic hits)" not in str(gate.get("observed", "")):
-            errors.append(
-                f"false_hit_rate_within_bound_{frac} observation does not state "
-                f"its recomputed counts ({k} of {n} semantic hits)"
-            )
+        for config in ("cache", "router_cascade", "router_heuristic"):
+            gate = by_name.get(f"false_hit_rate_within_bound_{frac}_{config}")
+            entry = metrics.get(f"{frac}_{config}", {})
+            if gate is None or not isinstance(entry, dict):
+                continue
+            rate = entry.get("false_hit_rate")
+            if not isinstance(rate, (int, float)):
+                errors.append(f"{frac}_{config} has no false_hit_rate to gate on")
+                continue
+            want = float(rate) <= FALSE_HIT_RATE_BAR
+            if gate.get("passed") is not want:
+                errors.append(
+                    f"false_hit_rate_within_bound_{frac}_{config} says {gate.get('passed')} "
+                    f"but {rate} <= {FALSE_HIT_RATE_BAR} is {want}"
+                )
+            k = len(entry.get("false_hit_rows") or [])
+            n = entry.get("cache_semantic_hits")
+            if f"({k} of {n} semantic hits)" not in str(gate.get("observed", "")):
+                errors.append(
+                    f"false_hit_rate_within_bound_{frac}_{config} observation does not "
+                    f"state its recomputed counts ({k} of {n} semantic hits)"
+                )
     return errors
 
 

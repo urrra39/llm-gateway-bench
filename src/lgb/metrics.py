@@ -3,8 +3,10 @@
 Validity gates are code, not prose:
 - baseline must cost more than the cached and routed runs, or the measurement
   is broken;
-- the semantic-cache false-hit rate must sit at or below FALSE_HIT_RATE_BAR,
-  and never be folded into the hit rate;
+- the semantic-cache false-hit rate must sit at or below FALSE_HIT_RATE_BAR
+  for every config that serves cached answers — the cache and both routers,
+  which all answer from the same semantic store — and never be folded into
+  the hit rate;
 - the tuned threshold must beat the best of 64 random thresholds drawn from
   the tuning grid, not their mean; F1 is flat across the recall-saturated
   plateau, so the best random draw ties the tuned point and this gate now
@@ -42,15 +44,17 @@ from lgb.judge import kappa_report
 from lgb.run import CONFIGS, run_dir
 from lgb.store import read_json, read_parquet, write_json
 
-#: Bar for a shippable semantic cache: at most one wrong answer served in
+#: Bar for a shippable cached answer: at most one wrong answer served in
 #: twenty semantic hits. A false hit is not a miss — it returns a confidently
 #: wrong answer to a user with no signal that anything went wrong — so the bar
 #: is a correctness bar, not a cost bar. 5% is the number this repository
-#: publishes against; it is a stated engineering choice, not a measurement,
-#: and the measured rates (0.0889 low, 0.0941 high) are above it, so both
-#: gates fail and the failure agrees with the no-ship recommendation the
-#: README already reaches. Raising the bar past the measured rates would make
-#: the gates unfalsifiable again, which is the defect they had.
+#: publishes against; it is a stated engineering choice, not a measurement. The
+#: cache and both routers answer from the same semantic store, so the bar
+#: applies to all three; the measured rates are above it for every one of them
+#: on both fractions, so all six gates fail and the failure agrees with the
+#: no-ship recommendation the README already reaches. Raising the bar past the
+#: measured rates would make the gates unfalsifiable again, which is the defect
+#: they had.
 FALSE_HIT_RATE_BAR = 0.05
 
 
@@ -333,21 +337,22 @@ def _quality_block(judge: pd.DataFrame | None, metric: dict[str, Any]) -> dict[s
     return quality
 
 
-def false_hit_rate_gate(frac: str, cache_metric: dict[str, Any]) -> dict[str, Any]:
+def false_hit_rate_gate(frac: str, config: str, metric: dict[str, Any]) -> dict[str, Any]:
     """Semantic-cache false hits must sit at or below FALSE_HIT_RATE_BAR.
 
     This gate used to assert only that a false-hit rate existed, which no
     observation could have violated. It now compares the measured rate
-    against a published bar, and on this workload it fails on both fractions.
-    A run that never reached the cache config fails too: an absent
-    measurement is not a satisfied bound.
+    against a published bar, and on this workload it fails on every config
+    that serves cached answers: the cache and both routers, which all answer
+    from the same semantic store. A run that never reached the config fails
+    too: an absent measurement is not a satisfied bound.
     """
-    name = f"false_hit_rate_within_bound_{frac}"
-    rate = cache_metric.get("false_hit_rate")
-    if not cache_metric.get("present") or not isinstance(rate, (int, float)):
-        return {"name": name, "passed": False, "observed": "cache run not present or unjudged"}
-    k = len(cache_metric.get("false_hit_rows") or [])
-    n = cache_metric.get("cache_semantic_hits")
+    name = f"false_hit_rate_within_bound_{frac}_{config}"
+    rate = metric.get("false_hit_rate")
+    if not metric.get("present") or not isinstance(rate, (int, float)):
+        return {"name": name, "passed": False, "observed": "run not present or unjudged"}
+    k = len(metric.get("false_hit_rows") or [])
+    n = metric.get("cache_semantic_hits")
     return {
         "name": name,
         "passed": float(rate) <= FALSE_HIT_RATE_BAR,
@@ -661,8 +666,10 @@ def assemble(cfg: Config, run_name: str, note: str = "") -> dict[str, Any]:
                     ),
                 }
             )
-        cm = metrics[f"{frac}_cache"]
-        gates.append(false_hit_rate_gate(frac, cm))
+        # The false-hit bar applies to every config that serves cached answers:
+        # the cache and both routers all answer from the same semantic store.
+        for config in ("cache", "router_cascade", "router_heuristic"):
+            gates.append(false_hit_rate_gate(frac, config, metrics[f"{frac}_{config}"]))
     tuning = read_json(cfg.data.runs_dir / "tuning.json") or {}
     # Strictly greater against the control MAXIMUM, not its mean. F1 is flat at
     # its maximum across the recall-saturated plateau (threshold 0.745 through

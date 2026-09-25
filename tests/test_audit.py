@@ -219,11 +219,11 @@ def test_audit_rejects_a_gate_verdict_the_bar_contradicts() -> None:
     data = audit.load_results()
     gates = [dict(g) for g in data["gates"]]
     for gate in gates:
-        if gate["name"] == "false_hit_rate_within_bound_low":
+        if gate["name"] == "false_hit_rate_within_bound_low_cache":
             gate["passed"] = True
     data["gates"] = gates
     errors: list[str] = audit.check_gate_bounds(data)
-    assert any("false_hit_rate_within_bound_low says True" in e for e in errors)
+    assert any("false_hit_rate_within_bound_low_cache says True" in e for e in errors)
 
 
 def test_audit_requires_the_readme_to_restate_every_gate_row(
@@ -233,7 +233,7 @@ def test_audit_requires_the_readme_to_restate_every_gate_row(
     audit = _load_audit()
     readme = Path("README.md").read_text(encoding="utf-8")
     dropped = readme.replace(
-        "| false_hit_rate_within_bound_high | FAIL | "
+        "| false_hit_rate_within_bound_high_cache | FAIL | "
         "0.0941 (8 of 85 semantic hits) vs bar 0.0500 |\n",
         "",
         1,
@@ -243,7 +243,9 @@ def test_audit_requires_the_readme_to_restate_every_gate_row(
     target.write_text(dropped, encoding="utf-8")
     monkeypatch.setattr(audit, "README", target)
     errors: list[str] = audit.check_gate_bounds(audit.load_results())
-    assert any("false_hit_rate_within_bound_high" in e and "lacks the row" in e for e in errors)
+    assert any(
+        "false_hit_rate_within_bound_high_cache" in e and "lacks the row" in e for e in errors
+    )
 
 
 def test_exact_hit_counts_agree_with_parquet() -> None:

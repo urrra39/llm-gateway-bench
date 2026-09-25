@@ -76,27 +76,33 @@ and quality is one judge pair from the same model with no human verification.
 Every cost number below is a function of the duplicate fractions, not a
 prediction about anyone's traffic. See docs/CEILING.md.
 
-Validity gates: all_gates_passed=false for run `full` (6/11 PASS, 5 FAIL).
+Validity gates: all_gates_passed=false for run `full` (6/15 PASS, 9 FAIL).
 Two failures forbid any correctness claim about the quality column: no human
-has verified a label, and both judges are the same model. Two more say the
-semantic cache is not shippable on this workload: its false-hit rate sits
-above the 5% bar on both duplicate fractions. The fifth is the tuning gate:
-the tuned threshold only ties the best of 64 random thresholds — F1 is flat
-across the recall-saturated plateau, so tuning on it selects nothing — and a
-tie is not a pass (see Findings and docs/OPEN_DEFECTS.md D6). Every gate below
-compares a measurement against a bound the data could have crossed, and the
-audit refuses any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
+has verified a label, and both judges are the same model. Six more say the
+cached answers are not shippable on this workload: the false-hit rate sits
+above the 5% bar on the cache and on both routers, on both duplicate
+fractions, because all three answer from the same semantic store and each is
+now gated on the same bar. The ninth is the tuning gate: the tuned threshold
+only ties the best of 64 random thresholds — F1 is flat across the
+recall-saturated plateau, so tuning on it selects nothing — and a tie is not a
+pass (see Findings and docs/OPEN_DEFECTS.md D6). Every gate below compares a
+measurement against a bound the data could have crossed, and the audit refuses
+any gate that does not (`GATE_BOUNDS` in scripts/audit_docs.py).
 
 | gate | status | observed |
 |---|---|---|
 | baseline_costs_more_low_cache | PASS | baseline 0.9226 vs cache 0.6139 |
 | baseline_costs_more_low_router_cascade | PASS | baseline 0.9226 vs router_cascade 0.5336 |
 | baseline_costs_more_low_router_heuristic | PASS | baseline 0.9226 vs router_heuristic 0.3282 |
-| false_hit_rate_within_bound_low | FAIL | 0.0889 (4 of 45 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_low_cache | FAIL | 0.0889 (4 of 45 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_low_router_cascade | FAIL | 0.1364 (6 of 44 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_low_router_heuristic | FAIL | 0.1463 (6 of 41 semantic hits) vs bar 0.0500 |
 | baseline_costs_more_high_cache | PASS | baseline 0.9187 vs cache 0.3792 |
 | baseline_costs_more_high_router_cascade | PASS | baseline 0.9187 vs router_cascade 0.2294 |
 | baseline_costs_more_high_router_heuristic | PASS | baseline 0.9187 vs router_heuristic 0.2212 |
-| false_hit_rate_within_bound_high | FAIL | 0.0941 (8 of 85 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_high_cache | FAIL | 0.0941 (8 of 85 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_high_router_cascade | FAIL | 0.0698 (6 of 86 semantic hits) vs bar 0.0500 |
+| false_hit_rate_within_bound_high_router_heuristic | FAIL | 0.1250 (10 of 80 semantic hits) vs bar 0.0500 |
 | tuned_threshold_beats_random_control | FAIL | tuned 0.79 f1 0.9008 vs control max 0.9008 (mean 0.8280) |
 | human_label_coverage | FAIL | 0/60 = 0.000 |
 | judge_independence | FAIL | primary deepseek-v4-flash == secondary deepseek-v4-flash; kappa 0.8034 (n=338) is self-consistency |
@@ -108,14 +114,17 @@ than a miss because the user gets no signal that anything went wrong. It is
 defined once as `FALSE_HIT_RATE_BAR` in src/lgb/metrics.py.
 
 No measured number moved in this round. The only change to results.json is
-the tuning gate: `tuned_threshold_beats_random_control` now compares the tuned
-F1 against the best (maximum) of the 64 random thresholds rather than their
-mean, and flips PASS to FAIL. The tuned F1 0.9008 and the control maximum
-0.9008 are equal to full precision because F1 is flat across the
-recall-saturated plateau (threshold 0.745 through 0.79), so the best random
-draw lands on the same maximum; a tie is not a pass. The gate line moved 7/11
-PASS, 4 FAIL to 6/11 PASS, 5 FAIL. Every rate, interval and cost is
-byte-identical to the previous results.json.
+the false-hit gate: `false_hit_rate_within_bound_low` and
+`false_hit_rate_within_bound_high`, each of which gated the cache alone, are
+replaced by six gates, one per config that serves cached answers
+(`false_hit_rate_within_bound_{low,high}_{cache,router_cascade,router_heuristic}`),
+because the cache and both routers answer from the same semantic store and the
+5% bar applies to each of them. Every one of the six reads FAIL: the cache at
+0.0889 (4 of 45) and 0.0941 (8 of 85), the cascade at 0.1364 (6 of 44) and
+0.0698 (6 of 86), the heuristic at 0.1463 (6 of 41) and 0.1250 (10 of 80). The
+gate count went from eleven to fifteen and the gate line from 6/11 PASS, 5
+FAIL to 6/15 PASS, 9 FAIL. Every rate, interval and cost is byte-identical to
+the previous results.json.
 
 ## The one remaining human step
 
@@ -380,7 +389,10 @@ recall destroyed. `docs/figures/threshold_tradeoff.svg` plots all three
 curves with the chosen point marked. Revised recommendation: do not ship the
 semantic cache for correctness-sensitive traffic on this workload. Ship the
 exact-match cache — a verbatim repeat served from store — plus short-recipe
-routing wherever one-sentence answers are acceptable.
+routing wherever one-sentence answers are acceptable. Both routers answer from
+that same semantic store, so their false-hit rates sit above the 5% bar as
+well; the recommendation names exact-match caching, not a similarity
+threshold, for exactly that reason.
 
 Two exact-hit counts appear in this README and they count two things.
 *Observed in the cache run*: the live cache answered 24 of 69 hits (34.8%)

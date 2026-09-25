@@ -268,8 +268,18 @@
       "passed": true
     },
     {
-      "name": "false_hit_rate_within_bound_low",
+      "name": "false_hit_rate_within_bound_low_cache",
       "observed": "0.0889 (4 of 45 semantic hits) vs bar 0.0500",
+      "passed": false
+    },
+    {
+      "name": "false_hit_rate_within_bound_low_router_cascade",
+      "observed": "0.1364 (6 of 44 semantic hits) vs bar 0.0500",
+      "passed": false
+    },
+    {
+      "name": "false_hit_rate_within_bound_low_router_heuristic",
+      "observed": "0.1463 (6 of 41 semantic hits) vs bar 0.0500",
       "passed": false
     },
     {
@@ -288,8 +298,18 @@
       "passed": true
     },
     {
-      "name": "false_hit_rate_within_bound_high",
+      "name": "false_hit_rate_within_bound_high_cache",
       "observed": "0.0941 (8 of 85 semantic hits) vs bar 0.0500",
+      "passed": false
+    },
+    {
+      "name": "false_hit_rate_within_bound_high_router_cascade",
+      "observed": "0.0698 (6 of 86 semantic hits) vs bar 0.0500",
+      "passed": false
+    },
+    {
+      "name": "false_hit_rate_within_bound_high_router_heuristic",
+      "observed": "0.1250 (10 of 80 semantic hits) vs bar 0.0500",
       "passed": false
     },
     {

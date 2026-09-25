@@ -32,6 +32,7 @@ Index:
 28. The human-validation file ships the rows that could change a conclusion.
 29. The tuning gate compares against the control maximum and fails on a tie.
 30. The authorship guard uses anchored trailer form; the allowlist is gone.
+31. The false-hit bar gates the cache and both routers; six gates, all fail.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -233,8 +234,10 @@ cannot run without an upstream (run/judge call the model), stated beside the
 
 Superseded in part by #29: tuned_threshold_beats_random_control now compares
 tuned F1 against the control maximum, not the mean, and records FAIL on the
-exact tie the re-audit below anticipated. The 5% false-hit bar and the rest of
-this entry still hold.
+exact tie the re-audit below anticipated. Superseded further by #31: the 5%
+bar now gates the cache and both routers, six gates on both fractions, not the
+cache alone, and the gate names carry the config. The 5% false-hit bar itself
+and the rest of this entry still hold.
 
 Rationale: false_hit_rate_reported_low and false_hit_rate_reported_high
 asserted only that a false-hit rate existed. No observation could have
@@ -494,3 +497,42 @@ Message trailers are git log -P --format='%B' piped to
 grep -nE '^(Co-[Aa]uthored-[Bb]y|Generated with|Assisted by):', which returns
 nothing; that second grep is the canonical one for attribution, and it is what
 the message guard automates per commit. No published number moved.
+
+## 31. The false-hit bar gates the cache and both routers; six gates, all fail.
+
+Rationale: FALSE_HIT_RATE_BAR was applied to the cache alone, while the two
+routers served answers from the same semantic store and were left ungated. A
+5% bar that binds one of the three configs that can serve a confidently wrong
+cached answer is not a bar on the workload; it is a bar on one config. The
+cache and both routers all carry cache_semantic_hits and false_hit_rows, so the
+same bound applies to each of them on each duplicate fraction. The two
+cache-only gates false_hit_rate_within_bound_{low,high} are therefore replaced
+by six, false_hit_rate_within_bound_{low,high}_{cache,router_cascade,router_heuristic},
+each recomputed independently from its own false_hit_rate against the same 5%
+bar and each restated verbatim in the README gate table.
+
+Every one of the six reads FAIL, because every point estimate is over the bar,
+with 95% Wilson intervals: low cache 0.0889 (4 of 45 semantic hits) 0.0351-0.2073,
+low cascade 0.1364 (6 of 44) 0.0640-0.2671, low heuristic 0.1463 (6 of 41)
+0.0688-0.2844, high cache 0.0941 (8 of 85) 0.0485-0.1749, high cascade 0.0698
+(6 of 86) 0.0324-0.1440, high heuristic 0.1250 (10 of 80) 0.0693-0.2150. Three
+of the six intervals straddle the bar rather than clearing it: low cache
+(0.0351-0.2073), high cache (0.0485-0.1749) and high cascade (0.0324-0.1440)
+each run under 0.05 at the lower end, so at these denominators the data cannot
+exclude a true rate at or under the bar even though the point estimate is over
+it, and that is stated rather than hidden. The other three intervals lie
+entirely over 0.05: low cascade, low heuristic and high heuristic. The verdict
+is on the point estimate, as it was for the cache alone; the straddles say only
+that the denominators are small.
+
+This extends #25, which put the 5% bar on the cache-only gates and remains the
+source of the bar and the no-ship reasoning; neither the bar nor that reasoning
+changed, only the set of configs the bar gates. The change is spend-free and no
+measured number moved: results.json turns two cache-only gates into six
+config-specific gates and changes nothing else. The gate count went from eleven
+to fifteen and the gate line from 6/11 PASS, 5 FAIL to 6/15 PASS, 9 FAIL;
+all_gates_passed was already false. scripts/audit_docs.py enforces the new
+count: GATE_BOUNDS carries all six false-hit entries, check_gates requires
+fifteen gates, and _recompute_false_hit_gates re-derives each verdict from the
+metrics block and the bar and checks its recomputed counts against the observed
+string.
