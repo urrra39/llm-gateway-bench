@@ -24,40 +24,48 @@ jobs:
         run: uv run mypy
       - name: Pytest
         run: uv run pytest -q
-      # Commit messages, checked against the same six phrases as the file
-      # contents below. The two guards drifted once: this one checked four
-      # phrases while that one checked six, so two of the six were unguarded
-      # in history. Widening it caught one commit immediately — run 36, and
-      # the offender was the message announcing the widening, which quotes
-      # two phrases as search terms. History is not rewritten in this
-      # repository, so that one hash is allowlisted by full SHA and named in
-      # docs/DECISIONS.md. Any other commit carrying any of the six fails,
-      # including any future one.
+      # Both authorship guards use ANCHORED trailer form: an attribution key at
+      # the start of a line (after optional whitespace) followed by a colon,
+      # such as Co-authored-by:, Assisted-by:, Signed-off-by:, Generated-with:
+      # or Generated-by:. This is strictly more precise than the old
+      # phrase-anywhere scan of six substrings, which matched those words in the
+      # middle of ordinary prose. That loose form false-hit exactly two places
+      # and each needed an escape hatch: commit 04589de, whose message quotes
+      # two of the phrases as search terms, and data/workload/paws_sample.csv,
+      # whose PAWS source sentence contains one of them. An attribution key
+      # never appears at line-start in either, so the anchored form matches
+      # neither and BOTH escape hatches are deleted: no SHA allowlist here, no
+      # paws exclusion below. Proven against history before shipping (the
+      # pattern matches no existing commit message and no tracked file except
+      # this one) and against a throwaway repository carrying a real trailer,
+      # which it caught in both a message and a file. History is not rewritten
+      # and not force-pushed. See docs/DECISIONS.md #30.
       - name: Authorship
         run: |
-          ALLOWED=04589de8bbf806912ad97b369d9caedce419bcbc
-          PATTERN="co-authored|generated with|copilot|assisted by|ai assistance|with the help of"
+          PATTERN='^[[:space:]]*(co-authored[ -]by|assisted[ -]by|signed-off-by|generated[ -]with|generated[ -]by):'
           offenders=$(git rev-list HEAD | while read -r sha; do
-            [ "$sha" = "$ALLOWED" ] && continue
             if git log -1 --format='%B' "$sha" | grep -iqE "$PATTERN"; then
               echo "$sha $(git log -1 --format='%s' "$sha")"
             fi
           done)
           if [ -n "$offenders" ]; then
-            echo "authorship phrase in commit message:" >&2
+            echo "attribution trailer in commit message:" >&2
             echo "$offenders" >&2
             exit 1
           fi
-          echo "no authorship phrase in any commit message"
-      # Model names are objects of study and are whitelisted. Excluded from
-      # its own scan: this workflow file (it carries the search pattern) and
-      # the public PAWS sample (a source sentence contains "with the help of").
+          echo "no attribution trailer in any commit message"
+      # This workflow file is excluded because it carries the search pattern
+      # itself. Model names are objects of study and stay whitelisted. The
+      # paws_sample.csv exclusion is gone: the anchored form does not match its
+      # mid-sentence phrase.
       - name: Authorship file contents
         run: |
-          if git grep -iE "co-authored|generated with|copilot|assisted by|ai assistance|with the help of" -- . ':!.github/workflows/ci.yml' ':!data/workload/paws_sample.csv' | grep -viE "deepseek-v4-flash|glm-5.3|all-minilm-l6-v2"; then
-            echo "authorship statement found in tracked files" >&2
+          PATTERN='^[[:space:]]*(co-authored[ -]by|assisted[ -]by|signed-off-by|generated[ -]with|generated[ -]by):'
+          if git grep -inE "$PATTERN" -- . ':!.github/workflows/ci.yml' | grep -viE "deepseek-v4-flash|glm-5.3|all-minilm-l6-v2"; then
+            echo "attribution trailer found in tracked files" >&2
             exit 1
           fi
+          echo "no attribution trailer in tracked files"
       - name: Audit docs
         run: uv run python scripts/audit_docs.py
 

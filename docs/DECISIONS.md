@@ -31,6 +31,7 @@ Index:
 27. The authorship guard checks six phrases, and one commit hash is allowlisted.
 28. The human-validation file ships the rows that could change a conclusion.
 29. The tuning gate compares against the control maximum and fails on a tie.
+30. The authorship guard uses anchored trailer form; the allowlist is gone.
 
 ## 1. Embeddings are local all-MiniLM-L6-v2 on CPU, not an API.
 
@@ -338,6 +339,11 @@ are CI durations read from the Actions API and from the runs' build logs.
 
 ## 27. The authorship guard checks six phrases, and one commit hash is allowlisted.
 
+Superseded by #30: both guards now match an anchored attribution trailer, not
+a phrase anywhere in a line, so the SHA allowlist and the paws_sample.csv
+exclusion are both gone. The history described below is unchanged; only the
+matching form is.
+
 Rationale: the repository had two authorship guards and they had drifted. The
 file-contents guard checked six phrases; the commit-message guard checked
 four. Two of the six were therefore unguarded in commit messages for the
@@ -454,3 +460,37 @@ two fields, the tuned gate observed string and its passed boolean; the observed
 was rounded to four places at the same time (0.9008, 0.8280). The gate line
 moved from 7/11 PASS, 4 FAIL to 6/11 PASS, 5 FAIL, and all_gates_passed was
 already false.
+
+## 30. The authorship guard uses anchored trailer form; the allowlist is gone.
+
+Rationale: the two guards matched six substrings anywhere in a line, so they
+fired on ordinary prose that merely quoted the words. Both now match an
+attribution trailer only, meaning an attribution key at the start of a line,
+after optional whitespace, followed by a colon: co-authored-by, assisted-by,
+signed-off-by, generated-with or generated-by, case-insensitive. This is
+strictly more precise. It catches the mechanism by which attribution is
+actually written, a trailer, and stops catching the same words mid-sentence.
+
+Two escape hatches existed only because of the loose form and both are now
+deleted. Commit 04589de was allowlisted by full SHA because its message quotes
+two of the old phrases as search terms; data/workload/paws_sample.csv was
+excluded because a PAWS source sentence contains one of them. Neither carries
+an attribution key at line-start, so the anchored form matches neither, and the
+guard is left with one exclusion, this workflow file, which carries the pattern
+itself. The file scan keeps the model-name whitelist because model names are
+objects of study.
+
+The anchored form was proven before it shipped. Over the whole history it
+matches no commit message, 04589de included; over the tree it matches no
+tracked file except the workflow. Against a throwaway repository it caught a
+real co-authored-by trailer in both a commit message and a file while ignoring
+the same phrase written mid-sentence. History is not rewritten and not
+force-pushed, so the anchored form had to come back clean against the existing
+messages rather than edit them, and it does.
+
+The canonical check is two commands. Author identity is
+git log --format='%an <%ae>' piped to sort -u, which lists only urrra39.
+Message trailers are git log -P --format='%B' piped to
+grep -nE '^(Co-[Aa]uthored-[Bb]y|Generated with|Assisted by):', which returns
+nothing; that second grep is the canonical one for attribution, and it is what
+the message guard automates per commit. No published number moved.
