@@ -220,7 +220,7 @@ def _replay_arrays(
     and would otherwise inflate its apparent recall.
     """
     texts = [r.request for r in rows]
-    vecs = embedder.encode(texts, batch_size=64)
+    vecs = embedder.encode(texts)
     seen: set[str] = set()
     should_hit = np.zeros(len(rows), dtype=bool)
     eligible = np.ones(len(rows), dtype=bool)
@@ -273,14 +273,18 @@ def _chat_nonempty(
         system_prompt = cfg.generation.system_prompt
         max_tokens = cfg.generation.max_tokens
     res = gw.chat(model, request, system_prompt=system_prompt, max_tokens=max_tokens)
-    if not res.text.strip():
-        res = gw.chat(
-            model,
-            request,
-            system_prompt=system_prompt,
-            max_tokens=max_tokens * 2,
-        )
-    return res.text, res.tokens_in, res.tokens_out, res.latency_s
+    if res.text.strip():
+        return res.text, res.tokens_in, res.tokens_out, res.latency_s
+    # An empty answer usually means reasoning ate the whole budget. Retry with
+    # double the budget, and bill both calls: the first one's tokens were paid
+    # for even though they produced nothing (docs/OPEN_DEFECTS.md D7).
+    retry = gw.chat(model, request, system_prompt=system_prompt, max_tokens=max_tokens * 2)
+    return (
+        retry.text,
+        res.tokens_in + retry.tokens_in,
+        res.tokens_out + retry.tokens_out,
+        res.latency_s + retry.latency_s,
+    )
 
 
 def _outcome_row(o: records.DecisionRow) -> dict[str, Any]:
@@ -324,26 +328,6 @@ def _anchor_dependencies(rows: list[records.WorkloadRow]) -> dict[int, int | Non
     return deps
 
 
-def _schedule(rows: list[records.WorkloadRow]) -> list[records.WorkloadRow]:
-    """A dispatch order that keeps every anchor ahead of its followers but
-    otherwise preserves workload order. Used only for diagnostics; the executor
-    dispatches by dependency completion."""
-    deps = _anchor_dependencies(rows)
-    placed: set[int] = set()
-    out: list[records.WorkloadRow] = []
-    remaining = list(rows)
-    while remaining:
-        for r in list(remaining):
-            dep = deps[r.idx]
-            if dep is None or dep in placed:
-                out.append(r)
-                placed.add(r.idx)
-                remaining.remove(r)
-        if not out or len(placed) == len(rows):
-            break
-    return out
-
-
 def execute_config(
     cfg: Config,
     config: str,
@@ -378,6 +362,16 @@ def execute_config(
     completed: set[int] = set()
 
     def process(r: records.WorkloadRow) -> None:
+        try:
+            _process(r)
+        finally:
+            # Mark done even if persisting failed, so the dispatcher below
+            # cannot wait forever on a follower; the error surfaces from
+            # f.result().
+            with lock:
+                completed.add(r.idx)
+
+    def _process(r: records.WorkloadRow) -> None:
         out: records.DecisionRow | None = None
         last_error = ""
         for attempt in range(cfg.gateway.max_retries + 1):
@@ -413,7 +407,6 @@ def execute_config(
                 )
             append_rows(pd.DataFrame([_outcome_row(out)]), outcomes_path)
             cache.save(cache_path)
-            completed.add(r.idx)
 
     def next_ready() -> records.WorkloadRow | None:
         with lock:
@@ -432,7 +425,7 @@ def execute_config(
             while True:
                 r = next_ready()
                 if r is None:
-                    if all(p.idx in completed for p in pending) or not pending:
+                    if not pending:
                         break
                     time.sleep(0.05)
                     continue
@@ -484,7 +477,8 @@ def _run_one(
     embed_ms = cache.last_embed_ms
     lookup_ms = cache.last_lookup_ms
     if look.kind in ("cache_exact", "cache_semantic"):
-        hit = next(i for i in cache.items if i.idx == look.hit_idx)
+        assert look.hit_idx is not None
+        hit = cache.get(look.hit_idx)
         return _outcome(
             config,
             frac,
@@ -549,7 +543,9 @@ def _run_one(
         if dec.escalate:
             exp_text, eti, eto, _ = _chat_nonempty(gw, expensive, r.request, cfg)
             text, ti, to = exp_text, cti + eti, cto + eto
-            served, model_ms = "expensive", model_ms + ms(t0)
+            # Both calls ran back to back, so the model time is everything
+            # since t0 (adding ms(t0) to the cheap time counted it twice: D5).
+            served, model_ms = "expensive", ms(t0)
             cost += price_for(cfg, expensive).cost_usd(eti, eto)
         else:
             text, ti, to = cheap_text, cti, cto

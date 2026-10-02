@@ -148,3 +148,80 @@ def test_http_500_names_the_variable_and_keeps_the_probe_prefix(monkeypatch: Any
     assert error["param"] == "LGB_GATEWAY_BASE_URL"
     assert error["message"].startswith("chat failed for deepseek-v4-flash")
     assert "LGB_GATEWAY_BASE_URL" in error["message"]
+
+
+def test_malformed_requests_are_400_in_openai_shape(monkeypatch: Any) -> None:
+    client, fake = _client(monkeypatch)
+    url = "/v1/chat/completions"
+    bad: list[Any] = [
+        [1, 2],
+        {"messages": "hi"},
+        {"messages": [{"role": "system", "content": "only a system turn"}]},
+        {"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        {"messages": [{"role": "user", "content": 42}]},
+    ]
+    for payload in bad:
+        resp = client.post(url, json=payload)
+        assert resp.status_code == 400, payload
+        assert resp.json()["error"]["type"] == "invalid_request_error"
+    resp = client.post(url, content=b"{not json", headers={"Content-Type": "application/json"})
+    assert resp.status_code == 400
+    ok = {"messages": [{"role": "user", "content": "hi"}]}
+    resp = client.post(url, json=ok, headers={"x-bench-mode": "bogus"})
+    assert resp.status_code == 400
+    assert fake.calls == []
+
+
+def test_content_parts_are_joined_and_ids_are_unique(monkeypatch: Any) -> None:
+    client, fake = _client(monkeypatch)
+    payload = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hello"}, {"type": "image"}]}
+        ]
+    }
+    first = client.post("/v1/chat/completions", json=payload).json()
+    second = client.post("/v1/chat/completions", json=payload).json()
+    assert first["id"] != second["id"]
+    assert second["x_gateway"]["hit"] is True
+    assert len(fake.calls) == 1
+
+
+def test_router_escalation_bills_both_calls(monkeypatch: Any) -> None:
+    client, fake = _client(monkeypatch)
+    answers = iter(["I am not sure.", "A full answer."])
+    original = fake.chat
+
+    def chat(model: str, user_content: str, **kw: Any) -> ChatResult:
+        res = original(model, user_content, **kw)
+        return ChatResult(next(answers), res.tokens_in, res.tokens_out, {})
+
+    monkeypatch.setattr(fake, "chat", chat)
+    body = client.post(
+        "/v1/chat/completions", json={"messages": [{"role": "user", "content": "q"}]}
+    ).json()
+    assert body["choices"][0]["message"]["content"] == "A full answer."
+    assert body["usage"] == {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30}
+    assert [c["max_tokens"] for c in fake.calls] == [512, None]
+
+
+def test_completion_without_choices_is_an_upstream_error(monkeypatch: Any) -> None:
+    monkeypatch.setattr("lgb.chat.time.sleep", lambda _s: None)
+    cfg = Config.load("config/bench.yaml")
+    gw = Gateway(cfg)
+    seen: list[dict[str, Any]] = []
+
+    def empty(request: httpx.Request) -> httpx.Response:
+        import json
+
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": []})
+
+    gw._client = httpx.Client(base_url=cfg.gateway.base_url, transport=httpx.MockTransport(empty))
+    try:
+        gw.chat("deepseek-v4-flash", "hi")
+    except UpstreamError as exc:
+        assert "served no completion" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("an empty choices list must raise UpstreamError")
+    assert len(seen) == cfg.gateway.max_retries
+    assert seen[0]["temperature"] == cfg.generation.temperature

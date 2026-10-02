@@ -3,8 +3,7 @@
 A workload row is one request occurrence with its known duplicate structure.
 A decision row records what the gateway did with it: which model served it,
 whether the cache produced the answer, at what similarity, and the timings and
-tokens. Judge rows hold the rubric score(s) against the baseline answer.
-"""
+tokens."""
 
 from __future__ import annotations
 
@@ -49,28 +48,4 @@ class DecisionRow:
     tokens_out: int
     cost_usd: float
     answer_text: str
-    baseline_row: int | None = None  # for router: baseline idx already answered
     error: str | None = None
-
-
-@dataclass
-class JudgeRow:
-    config: str
-    frac: str
-    idx: int
-    request: str
-    dup_type: DupType
-    answer_text: str
-    baseline_text: str
-    identical: bool
-    judge1_score: int | None = None  # 0/1/2
-    judge2_score: int | None = None
-    judge1_raw: str | None = None
-    judge2_raw: str | None = None
-    human_label: str = ""  # empty until a human fills it
-    sampled_for_judge2: bool = False
-    note: str = ""
-
-
-def decision_columns() -> list[str]:
-    return list(DecisionRow.__dataclass_fields__)

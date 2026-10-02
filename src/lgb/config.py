@@ -46,10 +46,6 @@ class GenerationSpec(Frozen):
     cheap_system_prompt: str = "Answer in one sentence. Be brief. Do not refuse."
 
 
-class ModelSpec(Frozen):
-    name: str
-
-
 class ModelsSpec(Frozen):
     cheap: str
     expensive: str
@@ -70,7 +66,8 @@ class PricesSpec(Frozen):
 
 
 class EmbeddingsSpec(Frozen):
-    provider: Literal["local_sentence_transformers", "api"] = "local_sentence_transformers"
+    #: Only a local sentence-transformer is implemented.
+    provider: Literal["local_sentence_transformers"] = "local_sentence_transformers"
     model: str = "all-MiniLM-L6-v2"
     models_dir: Path = Path("data/models")
     batch_size: int = 64
@@ -105,9 +102,19 @@ class HeuristicSpec(Frozen):
 
 class RouterSpec(Frozen):
     heuristic: HeuristicSpec
-    #: Cascade escalates to the expensive model when the cheap answer contains
-    #: an explicit uncertainty token. Empty means "never escalate".
-    cascade_escalation_words: tuple[str, ...] = ("not sure", "uncertain", "cannot", "can't")
+    #: Cascade escalates to the expensive model when the cheap answer is empty
+    #: or contains one of these tokens. An empty tuple escalates only on empty.
+    cascade_escalation_words: tuple[str, ...] = (
+        "not sure",
+        "uncertain",
+        "cannot",
+        "can't",
+        "can\u2019t",
+        "i don't know",
+        "i don\u2019t know",
+        "unable",
+        "sorry",
+    )
 
 
 class DuplicateFractionSpec(Frozen):

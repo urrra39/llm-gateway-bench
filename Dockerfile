@@ -33,4 +33,7 @@ RUN uv sync --frozen --no-dev --extra embeddings
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+    CMD [".venv/bin/python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+
 CMD [".venv/bin/python", "-m", "lgb", "serve"]

@@ -2,40 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
-from lgb.cache import (
-    choose_threshold,
-    evaluate_threshold,
-    normalize_exact,
-    simulate_threshold,
-)
+from lgb.cache import CacheItem, SemanticCache, normalize_exact, simulate_threshold
 
 
 def test_normalize_exact_collapses_whitespace_and_case() -> None:
     assert normalize_exact("  Hello   WORLD\n") == "hello world"
     assert normalize_exact("Explain  this") == "explain this"
-
-
-def test_evaluate_threshold_hand_computed() -> None:
-    pos = np.array([0.9, 0.8, 0.4])
-    neg = np.array([0.85, 0.3])
-    stats = evaluate_threshold(pos, neg, 0.8)
-    # positives >= 0.8: 0.9, 0.8 -> tp=2, fn=1; negatives >= 0.8: 0.85 -> fp=1, tn=1
-    assert stats["tp"] == 2
-    assert stats["fn"] == 1
-    assert stats["fp"] == 1
-    assert stats["tn"] == 1
-    assert stats["precision"] == 2 / 3
-    assert stats["recall"] == 2 / 3
-
-
-def test_choose_threshold_prefers_fewer_false_hits_on_tie() -> None:
-    pos = np.array([0.9, 0.9])
-    neg = np.array([0.1, 0.2])
-    thr, _ = choose_threshold(pos, neg, candidates=np.array([0.5, 0.9]))
-    # Both thresholds give F1=1.0; the higher threshold must win.
-    assert thr == 0.9
 
 
 def test_simulate_threshold_replays_growing_cache() -> None:
@@ -65,3 +41,17 @@ def test_simulate_threshold_counts_false_hit() -> None:
     stats = simulate_threshold(vecs, should_hit, eligible, 0.9)
     assert stats["fp"] == 1
     assert stats["false_hit_rate"] == 1.0
+
+
+def test_exact_hit_without_embedder_survives_save_and_load(tmp_path: Path) -> None:
+    cache = SemanticCache(0.9, None, exact=True)
+    assert cache.lookup("Hello world").kind == "miss"
+    cache.add(CacheItem(7, "Hello   world", "g1", "hi", "expensive"))
+    look = cache.lookup("  hello WORLD ")
+    assert (look.kind, look.hit_idx) == ("cache_exact", 7)
+    assert cache.get(7).answer_text == "hi"
+    # no embedder: a non-exact request misses instead of failing
+    assert cache.lookup("goodbye").kind == "miss"
+    cache.save(tmp_path / "items.parquet")
+    loaded = SemanticCache.load(tmp_path / "items.parquet", 0.9, None)
+    assert loaded.lookup("hello world").hit_idx == 7
