@@ -84,11 +84,21 @@ router:
       - difference
       - prove
       - justify
+  # Matched case-insensitively as substrings of the cheap answer; an empty
+  # answer always escalates. This is the list the committed runs used (it was
+  # hard-coded in router.py until 2026-10-02, which ignored this key). The
+  # curly-apostrophe variants were added then; no cheap answer the committed
+  # cascade runs kept contains one, so no stored decision changes.
   cascade_escalation_words:
     - not sure
     - uncertain
     - cannot
     - can't
+    - can’t
+    - i don't know
+    - i don’t know
+    - unable
+    - sorry
 
 workload:
   request_template: 'Explain this statement: "{sentence}"'

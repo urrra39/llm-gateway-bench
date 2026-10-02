@@ -13,12 +13,19 @@ from pathlib import Path
 import pandas as pd
 
 from lgb.config import Config
+from lgb.embed import Embedder
+from lgb.store import read_json
 
 DEFAULT_CONFIG = Path("config/bench.yaml")
 
 
 def _cfg(args: argparse.Namespace) -> Config:
     return Config.load(args.config)
+
+
+def _embedder(cfg: Config) -> Embedder:
+    e = cfg.embeddings
+    return Embedder(e.model, e.models_dir, e.batch_size)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,22 +91,15 @@ def main(argv: list[str] | None = None) -> int:
         print("workloads built under data/runs/workloads/")
         return 0
     if args.command == "tune":
-        from lgb.embed import Embedder
-
         cfg = _cfg(args)
-        embedder = Embedder(cfg.embeddings.model, cfg.embeddings.models_dir)
-        record = run_mod.tune_threshold(cfg, embedder)
+        record = run_mod.tune_threshold(cfg, _embedder(cfg))
         print(record)
         return 0
     if args.command == "run":
-        from lgb.embed import Embedder
-
         cfg = _cfg(args)
-        embedder = Embedder(cfg.embeddings.model, cfg.embeddings.models_dir)
+        embedder = _embedder(cfg)
         threshold = cfg.cache.sim_threshold
-        from lgb.store import read_json as _rj
-
-        tuning = _rj(cfg.data.runs_dir / "tuning.json")
+        tuning = read_json(cfg.data.runs_dir / "tuning.json")
         if tuning and "threshold" in tuning:
             threshold = float(tuning["threshold"])
         frame = run_mod.execute_config(
@@ -131,15 +131,11 @@ def main(argv: list[str] | None = None) -> int:
             print(("PASS" if g["passed"] else "FAIL"), g["name"], g["observed"])
         return 0
     if args.command == "tune-report":
-        from lgb.store import read_json as _rj2
-
         cfg = _cfg(args)
-        print(_rj2(cfg.data.runs_dir / "tuning.json") or {})
+        print(read_json(cfg.data.runs_dir / "tuning.json") or {})
         return 0
     if args.command == "results":
         cfg = _cfg(args)
-        from lgb.store import read_json
-
         print(read_json(cfg.data.primary_results) or {})
         return 0
     if args.command == "export-human":

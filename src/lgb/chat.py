@@ -67,6 +67,15 @@ def _api_key(cfg: Config) -> str | None:
     return os.environ.get(env) if env else None
 
 
+def _first_message(body: Any) -> dict[str, Any] | None:
+    """choices[0].message of a completion body, or None if the body has none."""
+    try:
+        message = body["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return message if isinstance(message, dict) else None
+
+
 class Gateway:
     """A thin OpenAI-compatible chat client with retries."""
 
@@ -88,7 +97,7 @@ class Gateway:
         *,
         system_prompt: str | None = None,
         max_tokens: int | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = None,
     ) -> ChatResult:
         messages: list[dict[str, str]] = []
         if system_prompt:
@@ -97,7 +106,7 @@ class Gateway:
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
+            "temperature": self.cfg.generation.temperature if temperature is None else temperature,
             "max_tokens": max_tokens or self.cfg.generation.max_tokens,
         }
         if self.cfg.generation.reasoning_effort:
@@ -106,22 +115,24 @@ class Gateway:
         unreachable = False
         unauthorized = False
         started = time.perf_counter()
-        for attempt in range(self.cfg.gateway.max_retries):
+        attempts = max(1, self.cfg.gateway.max_retries)
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(1.0 * attempt)
             try:
                 resp = self._client.post("/chat/completions", json=payload, headers=self._headers)
                 body = resp.json()
             except httpx.TransportError as exc:  # no route, refused, DNS, timeout
                 last_error = f"{type(exc).__name__}: {exc}"
                 unreachable = True
-                time.sleep(1.0 * (attempt + 1))
                 continue
             except (httpx.HTTPError, ValueError) as exc:  # protocol or JSON
                 last_error = f"{type(exc).__name__}: {exc}"
                 unreachable = False
-                time.sleep(1.0 * (attempt + 1))
                 continue
             unreachable = False
-            if resp.status_code != 200 or "choices" not in body:
+            message = _first_message(body) if resp.status_code == 200 else None
+            if message is None:
                 last_error = f"http {resp.status_code}: {json.dumps(body)[:300]}"
                 unauthorized = resp.status_code in (401, 403)
                 # budget/quota exhaustion will not clear on retry within seconds
@@ -129,16 +140,14 @@ class Gateway:
                     break
                 if unauthorized:
                     break
-                time.sleep(1.0 * (attempt + 1))
                 continue
-            msg = body["choices"][0]["message"]
-            text = (msg.get("content") or "").strip()
+            text = (message.get("content") or "").strip()
             usage = body.get("usage") or {}
             elapsed = time.perf_counter() - started
             return ChatResult(
                 text=text,
-                tokens_in=int(usage.get("prompt_tokens", 0)),
-                tokens_out=int(usage.get("completion_tokens", 0)),
+                tokens_in=int(usage.get("prompt_tokens") or 0),
+                tokens_out=int(usage.get("completion_tokens") or 0),
                 raw=body,
                 latency_s=elapsed,
             )

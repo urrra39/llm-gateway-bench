@@ -52,6 +52,7 @@ test:
 
 lint:
 	$(VENV)/ruff check src tests scripts
+	$(VENV)/ruff format --check src tests scripts
 
 typecheck:
 	$(VENV)/mypy

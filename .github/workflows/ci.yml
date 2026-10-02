@@ -19,7 +19,9 @@ jobs:
       - name: Install
         run: uv sync --frozen --group dev
       - name: Ruff
-        run: uv run ruff check src tests scripts
+        run: |
+          uv run ruff check src tests scripts
+          uv run ruff format --check src tests scripts
       - name: Mypy
         run: uv run mypy
       - name: Pytest

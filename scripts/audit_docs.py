@@ -143,7 +143,7 @@ DEFECTS: list[dict[str, str]] = [
     },
     {
         "id": "D5",
-        "status": "open",
+        "status": "fixed in code 2026-10-02; committed rows unrepaired",
         "title": "Cascade model_ms double-counts the cheap call on escalation",
         "detail": (
             "On escalated rows model_ms adds the cheap-call time twice, so it "
@@ -155,7 +155,9 @@ DEFECTS: list[dict[str, str]] = [
             "repaired by recomputation. Blocks: nothing published (headline "
             "tables use latency_ms; the tail decomposition uses latency_ms "
             "for tail rows); blocks any future claim that decomposes cascade "
-            "latency from model_ms."
+            "latency from model_ms. Since 2026-10-02 run.py records model_ms "
+            "on an escalated row as the wall time of both calls, so new rows "
+            "cannot exceed latency_ms; the committed rows keep the excess."
         ),
     },
     {
@@ -171,6 +173,40 @@ DEFECTS: list[dict[str, str]] = [
             "precision and tuned_threshold_beats_random_control records FAIL: a "
             "tie is not a pass. Closes when the gate is fed an objective whose "
             "argmax is unique, or a grid whose resolution separates the plateau."
+        ),
+    },
+    {
+        "id": "D7",
+        "status": "fixed in code 2026-10-02; committed rows unrepaired",
+        "title": "An empty-answer retry billed only the retry, not the empty first call",
+        "detail": (
+            "When a call returns empty content, run.py retries with double the "
+            "token budget. Until 2026-10-02 the stored tokens and cost were the "
+            "retry's alone, although the empty first call was paid for. The "
+            "skew is one-sided: a row whose tokens_out exceeds its tier budget "
+            "proves a retry, and there are none in either baseline run against "
+            "2 in high cache, 4 and 17 in the high and low cascade runs, and "
+            "17 and 23 in the high and low heuristic runs. Charging every such "
+            "row a full first-call budget plus its input tokens raises the "
+            "worst run (low cascade) from 0.5336 to at most 0.6309 USD, still "
+            "under its 0.9226 baseline, so every baseline_costs_more gate holds "
+            "at that bound. A retry whose second call stayed inside the first "
+            "budget leaves no trace, so the counts are lower bounds. New rows "
+            "bill both calls."
+        ),
+    },
+    {
+        "id": "D8",
+        "status": "open",
+        "title": "Heuristic router matches cues as substrings, not words",
+        "detail": (
+            "HeuristicRouter fires on a cue anywhere in the request, so how "
+            "matches however and show, and solve matches solvent. Whole-word "
+            "matching would route 8 low-fraction and 5 high-fraction "
+            "router_heuristic rows to the short recipe instead of the long one. "
+            "Left as is because the committed runs were routed this way and "
+            "would stop reproducing; changing it means rerunning both "
+            "router_heuristic runs and their judging."
         ),
     },
 ]

@@ -46,3 +46,15 @@ def test_cascade_keeps_confident_cheap_answer() -> None:
     dec = router.decide("anything", "The cat sat on the mat.")
     assert dec.escalate is False
     assert dec.route == "easy"
+
+
+def test_cascade_reads_escalation_words_from_config() -> None:
+    spec = _spec().router.model_copy(update={"cascade_escalation_words": ("maybe",)})
+    router = CascadeRouter(spec)
+    assert router.decide("anything", "Maybe it is blue.").escalate is True
+    assert router.decide("anything", "I am not sure.").escalate is False
+
+
+def test_cascade_escalates_on_curly_apostrophe() -> None:
+    router = CascadeRouter(_spec().router)
+    assert router.decide("anything", "I don\u2019t know.").escalate is True

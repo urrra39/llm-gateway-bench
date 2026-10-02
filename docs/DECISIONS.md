@@ -536,3 +536,40 @@ count: GATE_BOUNDS carries all six false-hit entries, check_gates requires
 fifteen gates, and _recompute_false_hit_gates re-derives each verdict from the
 metrics block and the bar and checks its recomputed counts against the observed
 string.
+
+## 32. Code defects fixed without moving a committed number.
+
+A review on 2026-10-02 found code that disagreed with its own config or
+docstrings. Each fix below either leaves every committed decision unchanged or
+is recorded as a defect instead of applied.
+
+- The cascade ignored `router.cascade_escalation_words` and escalated on a
+  hard-coded list in router.py. The config now carries that list and the
+  router reads it. Two curly-apostrophe variants were added; no short-recipe
+  answer the committed cascade runs kept contains either, so no stored
+  decision changes.
+- An empty-answer retry billed only the retry. New rows bill both calls; the
+  committed rows are bounded in D7, and every cost gate holds at the bound.
+- The cascade's `model_ms` counted the short call twice on escalation (D5).
+  New rows record the wall time of both calls.
+- The heuristic matches cues as substrings. Fixing it would reroute 13
+  committed rows, so it is recorded as D8 and not changed.
+- The live gateway called the blocking upstream client inside an async
+  handler, so one slow completion stalled every other request and `/health`.
+  Upstream calls now run in a worker thread. Malformed bodies, `stream=true`
+  and unknown `x-bench-mode` values return 400 in the OpenAI error shape
+  instead of 500; completion ids are unique; an escalated router call reports
+  the usage of both calls.
+- A worker that failed while persisting a row left the dispatcher waiting on
+  it forever. The row is now marked done either way and the error surfaces.
+- A failed judge call discarded up to 19 verdicts already paid for. They are
+  now flushed before the error propagates. The second-judge sample is drawn
+  over all outcomes, so a resumed run samples what a single run would; for an
+  uninterrupted run the draw is identical, and every committed sample matches it.
+- Configured temperatures (generation and judge) were never sent; both are now
+  sent. Both are 0.0, the value that was hard-coded.
+- Dead code removed: content_cache.py (never called, despite a docstring
+  saying resumes used it), pair-based threshold helpers superseded by replay
+  tuning, unused record types and fields.
+- `.python-version` pins 3.11: on 3.12 uv resolves a numpy whose stubs mypy
+  rejects under `python_version = "3.11"`.

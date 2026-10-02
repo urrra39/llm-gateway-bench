@@ -54,12 +54,10 @@ def judge_run(
 
     sample: list[int] = []
     if judge_cfg.second_judge_sample > 0:
+        # Drawn over every outcome, judged or not, so a resumed run samples
+        # exactly the rows a single uninterrupted run would have.
         rng = np.random.default_rng(judge_cfg.sample_seed)
-        candidate_idx = [
-            int(r.idx)
-            for r in outcomes.itertuples(index=False)
-            if f"{config}|{frac}|{r.idx}" not in done
-        ]
+        candidate_idx = [int(r.idx) for r in outcomes.itertuples(index=False)]
         k = min(judge_cfg.second_judge_sample, len(candidate_idx))
         sample = (
             sorted(int(x) for x in rng.choice(candidate_idx, size=k, replace=False))
@@ -113,7 +111,10 @@ def judge_run(
             row["note"] = "identical to baseline, no judge call"
             return row
         text1 = gw.chat(
-            primary, prompt(str(r.request), answer_a, answer_b), max_tokens=judge_cfg.max_tokens
+            primary,
+            prompt(str(r.request), answer_a, answer_b),
+            max_tokens=judge_cfg.max_tokens,
+            temperature=judge_cfg.temperature,
         ).text
         row["judge1_raw"] = text1
         row["judge1_score"] = parse(text1)
@@ -122,6 +123,7 @@ def judge_run(
                 secondary,
                 prompt(str(r.request), answer_a, answer_b),
                 max_tokens=judge_cfg.max_tokens,
+                temperature=judge_cfg.temperature,
             ).text
             row["judge2_raw"] = text2
             row["judge2_score"] = parse(text2)
@@ -142,11 +144,14 @@ def judge_run(
                 append_rows(pd.DataFrame(collected), judge_path)
                 collected.clear()
 
-    if work:
-        with ThreadPoolExecutor(max_workers=max(1, n_workers)) as pool:
-            list(pool.map(worker, work))
-    if collected:
-        append_rows(pd.DataFrame(collected), judge_path)
+    try:
+        if work:
+            with ThreadPoolExecutor(max_workers=max(1, n_workers)) as pool:
+                list(pool.map(worker, work))
+    finally:
+        # Keep every verdict already paid for, even when a later call fails.
+        if collected:
+            append_rows(pd.DataFrame(collected), judge_path)
     final = read_parquet(judge_path)
     assert final is not None
     return final

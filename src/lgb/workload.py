@@ -54,10 +54,6 @@ def load_pairs(path: Path) -> list[Pair]:
     return pairs
 
 
-def _fill_requests(template: str, texts: list[str]) -> list[str]:
-    return [template.format(sentence=t) for t in texts]
-
-
 def build_workload(
     cfg: Config, frac: DuplicateFractionSpec, pairs: list[Pair], rng: np.random.Generator
 ) -> list[WorkloadRow]:

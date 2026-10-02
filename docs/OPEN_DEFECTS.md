@@ -29,12 +29,24 @@ An escalation pays two sequential model calls. On the low fraction cascade p99 i
 
 ## D5: Cascade model_ms double-counts the cheap call on escalation
 
-Status: open
+Status: fixed in code 2026-10-02; committed rows unrepaired
 
-On escalated rows model_ms adds the cheap-call time twice, so it can exceed latency_ms (12 low-fraction and 5 high-fraction escalated rows, worst excess 12650.3 ms and 11833.5 ms). Exact fix: record cheap_ms and expensive_ms as two timing fields per escalated row instead of accumulating into one model_ms. The stored rows carry no per-call breakdown, so past rows cannot be repaired by recomputation. Blocks: nothing published (headline tables use latency_ms; the tail decomposition uses latency_ms for tail rows); blocks any future claim that decomposes cascade latency from model_ms.
+On escalated rows model_ms adds the cheap-call time twice, so it can exceed latency_ms (12 low-fraction and 5 high-fraction escalated rows, worst excess 12650.3 ms and 11833.5 ms). Exact fix: record cheap_ms and expensive_ms as two timing fields per escalated row instead of accumulating into one model_ms. The stored rows carry no per-call breakdown, so past rows cannot be repaired by recomputation. Blocks: nothing published (headline tables use latency_ms; the tail decomposition uses latency_ms for tail rows); blocks any future claim that decomposes cascade latency from model_ms. Since 2026-10-02 run.py records model_ms on an escalated row as the wall time of both calls, so new rows cannot exceed latency_ms; the committed rows keep the excess.
 
 ## D6: Tuning F1 over the recall-saturated plateau selects nothing; the gate ties
 
 Status: open
 
 F1 reaches its maximum 0.9008 across ten grid thresholds from 0.745 through 0.79, every one with tp 118, fp 26, fn 0 and recall 1.0000, so the objective ranks the whole plateau identically and its argmax picks 0.79 arbitrarily. Seven of the 64 random control draws land on that plateau, so control_random_max_f1 equals tuned_f1 to full float precision and tuned_threshold_beats_random_control records FAIL: a tie is not a pass. Closes when the gate is fed an objective whose argmax is unique, or a grid whose resolution separates the plateau.
+
+## D7: An empty-answer retry billed only the retry, not the empty first call
+
+Status: fixed in code 2026-10-02; committed rows unrepaired
+
+When a call returns empty content, run.py retries with double the token budget. Until 2026-10-02 the stored tokens and cost were the retry's alone, although the empty first call was paid for. The skew is one-sided: a row whose tokens_out exceeds its tier budget proves a retry, and there are none in either baseline run against 2 in high cache, 4 and 17 in the high and low cascade runs, and 17 and 23 in the high and low heuristic runs. Charging every such row a full first-call budget plus its input tokens raises the worst run (low cascade) from 0.5336 to at most 0.6309 USD, still under its 0.9226 baseline, so every baseline_costs_more gate holds at that bound. A retry whose second call stayed inside the first budget leaves no trace, so the counts are lower bounds. New rows bill both calls.
+
+## D8: Heuristic router matches cues as substrings, not words
+
+Status: open
+
+HeuristicRouter fires on a cue anywhere in the request, so how matches however and show, and solve matches solvent. Whole-word matching would route 8 low-fraction and 5 high-fraction router_heuristic rows to the short recipe instead of the long one. Left as is because the committed runs were routed this way and would stop reproducing; changing it means rerunning both router_heuristic runs and their judging.

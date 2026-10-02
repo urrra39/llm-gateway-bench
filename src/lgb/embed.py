@@ -13,9 +13,10 @@ import numpy as np
 
 
 class Embedder:
-    def __init__(self, model_name: str, models_dir: Path) -> None:
+    def __init__(self, model_name: str, models_dir: Path, batch_size: int = 64) -> None:
         self.model_name = model_name
         self.models_dir = models_dir
+        self.batch_size = batch_size
         self._model: Any = None
         self._loaded = False
 
@@ -27,24 +28,17 @@ class Embedder:
         self._model = SentenceTransformer(self.model_name, cache_folder=str(self.models_dir))
         self._loaded = True
 
-    def encode(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
+    def encode(self, texts: list[str]) -> np.ndarray:
         self._load()
         assert self._model is not None
         vecs = self._model.encode(
             texts,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             convert_to_numpy=True,
             normalize_embeddings=True,
         )
-        arr = np.asarray(vecs, dtype=np.float32)
-        return arr
+        return np.asarray(vecs, dtype=np.float32)
 
     def close(self) -> None:  # pragma: no cover - lifecycle helper
         self._model = None
         self._loaded = False
-
-
-def cosine_sim_matrix(query: np.ndarray, stored: np.ndarray) -> np.ndarray:
-    """query (m, d) x stored (n, d) normalized cosine similarity."""
-    result: np.ndarray = query @ stored.T
-    return result

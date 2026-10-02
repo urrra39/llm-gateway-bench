@@ -321,10 +321,13 @@ eaten most of it (recorded in docs/OPEN_DEFECTS.md, not implemented).
 ![](docs/figures/latency_low.svg)
 ![](docs/figures/latency_high.svg)
 
-Measurement caveat: on escalated cascade rows `model_ms` double-counts the
+Measurement caveats, both fixed in code on 2026-10-02 and both still present
+in the committed rows. On escalated cascade rows `model_ms` double-counts the
 short call (e.g. 80514 ms of model time inside a 70403 ms request), so the
-decomposition above uses `latency_ms` for tail rows. Token and cost accounting
-sum each call once and are unaffected.
+decomposition above uses `latency_ms` for tail rows (docs/OPEN_DEFECTS.md
+D5). And an empty-answer retry billed only the retry, never the empty first
+call; that understates the cache and both routers but never the baseline,
+and at its worst-case bound every cost gate still holds (D7).
 
 ## Duplicate-fraction sensitivity
 
